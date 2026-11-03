@@ -149,6 +149,19 @@
             <small>教师后台</small>
           </span>
         </a>
+        <div class="course-selector">
+          <button type="button" class="course-trigger" id="course-trigger" aria-haspopup="true" aria-expanded="false">
+            <span class="course-trigger-icon">Σ</span>
+            <span class="course-trigger-copy">
+              <small>当前课程</small>
+              <strong id="current-course-name">全部课程</strong>
+            </span>
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="m7 10 5 5 5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
+          <div class="course-menu" id="course-menu" hidden></div>
+        </div>
         <div class="topbar-actions">
           <button type="button" class="teacher-profile" id="profile-button" title="教师账号设置">
             <span class="teacher-avatar" id="teacher-avatar">师</span>
@@ -477,6 +490,62 @@
           <button type="submit" class="button secondary small" id="password-save">更新密码</button>
         </form>
         <p class="profile-legacy-note" id="profile-legacy-note" hidden>当前是教师口令登录，不能修改资料或密码。请退出后使用邮箱账号登录。</p>
+      </div>
+    </section>
+
+    <div class="modal-backdrop" id="course-backdrop" hidden></div>
+    <section class="profile-modal course-modal" id="course-modal" role="dialog" aria-modal="true" aria-labelledby="course-modal-title" aria-hidden="true">
+      <header class="profile-modal-header">
+        <div>
+          <p class="eyebrow">COURSE MANAGEMENT</p>
+          <h2 id="course-modal-title">课程管理</h2>
+        </div>
+        <button type="button" class="icon-button" id="course-modal-close" aria-label="关闭课程管理">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+          </svg>
+        </button>
+      </header>
+      <div class="profile-modal-body">
+        <div class="course-manage-list" id="course-manage-list"></div>
+        <div class="profile-divider"></div>
+        <form id="course-form" class="profile-form">
+          <h3 id="course-form-title">新建课程</h3>
+          <div class="form-row">
+            <label class="field-label" for="course-name">课程名称</label>
+            <input id="course-name" class="plain-input" maxlength="120" placeholder="例如：数学分析" required />
+          </div>
+          <div class="form-row two-col">
+            <div>
+              <label class="field-label" for="course-teacher">教师姓名</label>
+              <input id="course-teacher" class="plain-input" maxlength="80" placeholder="例如：王老师" required />
+            </div>
+            <div>
+              <label class="field-label" for="course-code">课程编号</label>
+              <input id="course-code" class="plain-input" maxlength="64" placeholder="例如：2026秋-M408008B01" required />
+            </div>
+          </div>
+          <div class="form-row two-col">
+            <div>
+              <label class="field-label" for="course-term">学期</label>
+              <input id="course-term" class="plain-input" maxlength="32" placeholder="例如：2026秋" />
+            </div>
+            <div>
+              <label class="field-label" for="course-color">课程颜色</label>
+              <select id="course-color" class="plain-input">
+                <option value="0">珊瑚橙</option>
+                <option value="1">天空蓝</option>
+                <option value="2">湖水青</option>
+                <option value="3">雾紫</option>
+                <option value="4">暖金</option>
+                <option value="5">森林绿</option>
+              </select>
+            </div>
+          </div>
+          <p class="form-error" id="course-error" role="alert"></p>
+          <input type="hidden" id="course-edit-id" value="" />
+          <button type="submit" class="button primary small" id="course-save">创建课程</button>
+        </form>
       </div>
     </section>
 

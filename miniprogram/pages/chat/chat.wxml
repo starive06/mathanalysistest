@@ -13,6 +13,8 @@
     <view class="header-badge">数分答疑</view>
   </view>
 
+  <course-context course="{{activeCourse}}" />
+
   <scroll-view
     class="messages-scroll"
     scroll-y
@@ -200,4 +202,5 @@
       <text>长按回答可复制</text>
     </view>
   </view>
+  <workspace-tab-bar id="workspaceTabBar" selected="{{0}}" />
 </view>

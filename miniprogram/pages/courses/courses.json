@@ -1,0 +1,8 @@
+{
+  "navigationBarTitleText": "我的课堂",
+  "navigationBarBackgroundColor": "#F4F8F4",
+  "navigationBarTextStyle": "black",
+  "backgroundColor": "#F4F8F4",
+  "enablePullDownRefresh": true,
+  "backgroundTextStyle": "dark"
+}

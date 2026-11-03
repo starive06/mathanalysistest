@@ -31,6 +31,8 @@
     </view>
   </view>
 
+  <course-context course="{{activeCourse}}" />
+
   <block wx:if="{{top.length}}">
     <view class="section-head">
       <view class="section-title-wrap">
@@ -296,4 +298,5 @@
     </view>
     <view class="sheet-safe"></view>
   </view>
+  <workspace-tab-bar id="workspaceTabBar" selected="{{2}}" />
 </view>

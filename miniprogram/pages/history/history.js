@@ -1,5 +1,6 @@
 const api = require('../../utils/api');
 const { formatListTime, getAnswerPreview } = require('../../utils/format');
+const { getActiveCourse, requireActiveCourse } = require('../../utils/course');
 
 const PAGE_SIZE = 30;
 
@@ -12,6 +13,7 @@ Page({
     hasMore: false,
     loadError: '',
     skeletons: [1, 2, 3],
+    activeCourse: null,
   },
 
   onLoad() {
@@ -19,6 +21,9 @@ Page({
   },
 
   onShow() {
+    const course = requireActiveCourse();
+    if (!course) return;
+    this.setData({ activeCourse: course });
     this.syncTabBar();
     this.loadQuestions({ reset: true });
   },
@@ -34,10 +39,8 @@ Page({
   },
 
   syncTabBar() {
-    const tabBar = typeof this.getTabBar === 'function' && this.getTabBar();
-    if (!tabBar) return;
-    tabBar.setSelected(1);
-    tabBar.setHidden(false);
+    const tabBar = this.selectComponent('#workspaceTabBar');
+    if (tabBar) tabBar.setHidden(false);
   },
 
   async loadQuestions(options) {
@@ -56,7 +59,8 @@ Page({
     });
 
     try {
-      const data = await api.getMyQuestions(PAGE_SIZE, offset);
+      const courseId = this.data.activeCourse?.id || getActiveCourse()?.id || '';
+      const data = await api.getMyQuestions(PAGE_SIZE, offset, courseId);
       if (seq !== this._loadSeq) return;
       const incoming = (data.items || []).map((item) => ({
         id: item.id,
@@ -100,11 +104,11 @@ Page({
     const id = event.currentTarget.dataset.id;
     if (!id) return;
     getApp().globalData.pendingQuestionId = id;
-    wx.switchTab({ url: '/pages/chat/chat' });
+    wx.redirectTo({ url: '/pages/chat/chat' });
   },
 
   goChat() {
-    wx.switchTab({ url: '/pages/chat/chat' });
+    wx.redirectTo({ url: '/pages/chat/chat' });
   },
 
   retry() {

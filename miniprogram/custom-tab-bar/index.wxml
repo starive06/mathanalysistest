@@ -17,6 +17,9 @@
           src="{{selected === index ? item.selectedIconPath : item.iconPath}}"
           mode="aspectFit"
         />
+        <view class="tab-badge" wx:if="{{index === 1 && messageUnread > 0}}">
+          {{messageUnread > 99 ? '99+' : messageUnread}}
+        </view>
       </view>
       <text class="tab-text">{{item.text}}</text>
       <view class="active-mark"></view>

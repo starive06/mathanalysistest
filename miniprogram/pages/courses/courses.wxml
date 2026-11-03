@@ -1,0 +1,90 @@
+<view class="page">
+  <view class="course-hero">
+    <view class="hero-orbit">
+      <view class="orbit-ring orbit-ring-back"></view>
+      <view class="orbit-ring"></view>
+      <view class="hero-book">
+        <view class="book-page"></view>
+        <view class="book-page book-page-two"></view>
+        <view class="book-spine"></view>
+        <view class="book-mark"></view>
+      </view>
+    </view>
+    <view class="hero-copy">
+      <text class="hero-kicker">MY CLASSROOMS</text>
+      <text class="hero-title">我的课堂</text>
+      <text class="hero-sub">选一门课，继续今天的数学追问。</text>
+    </view>
+    <view class="hero-stat">
+      <text class="hero-stat-number">{{courses.length}}</text>
+      <text class="hero-stat-label">门课程</text>
+    </view>
+  </view>
+
+  <view class="course-section-head">
+    <view>
+      <text class="section-title">课程列表</text>
+      <text class="section-sub">教师发布的内容、答疑和同学圈都在课程里</text>
+    </view>
+    <view class="message-shortcut" bindtap="goMessages" wx:if="{{messageUnread}}">
+      <view class="message-shortcut-dot"></view>
+      <text>有 {{messageUnread}} 条新消息</text>
+    </view>
+  </view>
+
+  <view class="course-list" wx:if="{{courses.length}}">
+    <view
+      wx:for="{{courses}}"
+      wx:key="id"
+      class="course-card tone-{{item.colorIndex}} {{activeCourseId === item.id ? 'is-current' : ''}}"
+      data-id="{{item.id}}"
+      bindtap="enterCourse"
+      hover-class="course-card-hover"
+      hover-stay-time="70"
+    >
+      <view class="course-card-glow"></view>
+      <view class="course-card-top">
+        <view class="course-book-icon">
+          <view class="mini-book mini-book-back"></view>
+          <view class="mini-book mini-book-front">
+            <view class="mini-book-line"></view>
+            <view class="mini-book-line short"></view>
+          </view>
+        </view>
+        <view class="course-badge">课程</view>
+      </view>
+      <view class="course-card-copy">
+        <text class="course-name">{{item.name}}</text>
+        <text class="course-teacher">{{item.teacherText}}</text>
+        <text class="course-code">{{item.codeText}}</text>
+        <text class="course-meta" wx:if="{{item.metaText}}">{{item.metaText}}</text>
+      </view>
+      <view class="course-card-foot">
+        <text class="course-enter">进入课堂</text>
+        <text class="course-arrow">→</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="course-loading" wx:elif="{{loading}}">
+    <view class="course-skeleton" wx:for="{{skeletons}}" wx:key="*this">
+      <view class="skeleton-block"></view>
+      <view class="skeleton-line"></view>
+      <view class="skeleton-line short"></view>
+    </view>
+  </view>
+
+  <view class="course-empty" wx:else>
+    <view class="empty-icon">Σ</view>
+    <text class="empty-title">还没有可进入的课程</text>
+    <text class="empty-copy">请老师先在教师后台创建课程，再回来看看。</text>
+    <button class="retry-button" bindtap="retry">重新加载</button>
+  </view>
+
+  <view class="course-load-error" wx:if="{{loadError}}">
+    <text>{{loadError}}</text>
+    <button class="retry-button" bindtap="retry">重试</button>
+  </view>
+
+  <view class="course-bottom-space"></view>
+</view>

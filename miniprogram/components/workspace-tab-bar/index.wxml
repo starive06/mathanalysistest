@@ -1,0 +1,24 @@
+<view class="workspace-tab-bar {{hidden ? 'workspace-tab-bar-hidden' : ''}}">
+  <view class="workspace-tab-content">
+    <view
+      wx:for="{{list}}"
+      wx:key="pagePath"
+      class="workspace-tab-item {{selected === index ? 'active' : ''}}"
+      data-index="{{index}}"
+      bindtap="switchTab"
+      hover-class="workspace-tab-hover"
+      hover-stay-time="60"
+    >
+      <view class="workspace-tab-icon-wrap">
+        <image
+          class="workspace-tab-icon"
+          src="{{selected === index ? item.selectedIconPath : item.iconPath}}"
+          mode="aspectFit"
+        />
+      </view>
+      <text class="workspace-tab-text">{{item.text}}</text>
+      <view class="workspace-active-mark"></view>
+    </view>
+  </view>
+  <view class="workspace-tab-safe"></view>
+</view>

@@ -61,10 +61,14 @@ export function normalizeBackupPayload(payload) {
     createdAt: payload.createdAt || source.createdAt,
     counts: payload.counts || source.counts,
     likes: Array.isArray(source.likes) ? source.likes : [],
+    courses: Array.isArray(source.courses) ? source.courses : [],
     teachers: Array.isArray(source.teachers) ? source.teachers : [],
     comments: Array.isArray(source.comments) ? source.comments : [],
     commentLikes: Array.isArray(source.commentLikes) ? source.commentLikes : [],
     resources: Array.isArray(source.resources) ? source.resources : [],
+    courseNotices: Array.isArray(source.courseNotices) ? source.courseNotices : [],
+    noticeReads: Array.isArray(source.noticeReads) ? source.noticeReads : [],
+    studentEvents: Array.isArray(source.studentEvents) ? source.studentEvents : [],
   };
 }
 
@@ -183,6 +187,7 @@ export class BackupService {
       createdAt,
       counts: snapshot.counts,
       data: {
+        courses: Array.isArray(snapshot.courses) ? snapshot.courses : [],
         teachers: Array.isArray(snapshot.teachers) ? snapshot.teachers : [],
         students: snapshot.students,
         questions: snapshot.questions,
@@ -190,6 +195,9 @@ export class BackupService {
         comments: Array.isArray(snapshot.comments) ? snapshot.comments : [],
         commentLikes: Array.isArray(snapshot.commentLikes) ? snapshot.commentLikes : [],
         resources: Array.isArray(snapshot.resources) ? snapshot.resources : [],
+        courseNotices: Array.isArray(snapshot.courseNotices) ? snapshot.courseNotices : [],
+        noticeReads: Array.isArray(snapshot.noticeReads) ? snapshot.noticeReads : [],
+        studentEvents: Array.isArray(snapshot.studentEvents) ? snapshot.studentEvents : [],
       },
     };
   }

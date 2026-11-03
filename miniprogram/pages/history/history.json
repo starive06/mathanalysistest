@@ -6,5 +6,8 @@
   "enablePullDownRefresh": true,
   "backgroundTextStyle": "dark",
   "onReachBottomDistance": 120,
-  "usingComponents": {}
+  "usingComponents": {
+    "workspace-tab-bar": "/components/workspace-tab-bar/index",
+    "course-context": "/components/course-context/index"
+  }
 }

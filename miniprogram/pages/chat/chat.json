@@ -4,5 +4,8 @@
   "navigationBarTextStyle": "black",
   "backgroundColor": "#EDEDED",
   "disableScroll": true,
-  "usingComponents": {}
+  "usingComponents": {
+    "workspace-tab-bar": "/components/workspace-tab-bar/index",
+    "course-context": "/components/course-context/index"
+  }
 }

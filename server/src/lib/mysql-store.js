@@ -17,6 +17,8 @@ const PUBLIC_SELECT = `
   q.status,
   q.latency_ms,
   q.created_at,
+  q.course_id,
+  (SELECT c.name FROM courses c WHERE c.id = q.course_id) AS course_name,
   q.image_token,
   q.image_mime,
   q.image_size_bytes,
@@ -205,6 +207,118 @@ export class MySQLQuestionStore {
     return aliasFor(ownerHash);
   }
 
+  _serializeCourse(row) {
+    return {
+      id: row.id,
+      name: row.name,
+      teacherName: row.teacher_name,
+      courseCode: row.course_code,
+      term: row.term || '',
+      colorIndex: toSafeNumber(row.color_index),
+      sortOrder: toSafeNumber(row.sort_order),
+      status: row.status || 'active',
+      createdAt: toIsoString(row.created_at),
+      updatedAt: toIsoString(row.updated_at),
+      deletedAt: toIsoString(row.deleted_at),
+    };
+  }
+
+  async listCourses({ includeArchived = false } = {}) {
+    const [rows] = await this.pool.execute(
+      `SELECT id, name, teacher_name, course_code, term, color_index, sort_order,
+              status, created_at, updated_at, deleted_at
+       FROM courses
+       WHERE deleted_at IS NULL${includeArchived ? '' : " AND status = 'active'"}
+       ORDER BY sort_order ASC, created_at ASC`,
+    );
+    return rows.map((row) => this._serializeCourse(row));
+  }
+
+  async getCourse(id) {
+    const [rows] = await this.pool.execute(
+      `SELECT id, name, teacher_name, course_code, term, color_index, sort_order,
+              status, created_at, updated_at, deleted_at
+       FROM courses WHERE id = ? AND deleted_at IS NULL LIMIT 1`,
+      [id],
+    );
+    return rows[0] ? this._serializeCourse(rows[0]) : null;
+  }
+
+  async createCourse({ id, name, teacherName, courseCode, term, colorIndex, sortOrder }) {
+    const now = new Date();
+    try {
+      await this.pool.execute(
+        `INSERT INTO courses
+          (id, name, teacher_name, course_code, term, color_index, sort_order,
+           status, created_at, updated_at, deleted_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, NULL)`,
+        [
+          id,
+          name,
+          teacherName,
+          courseCode,
+          term || null,
+          Number(colorIndex) || 0,
+          Number(sortOrder) || 0,
+          now,
+          now,
+        ],
+      );
+    } catch (error) {
+      if (error?.code === 'ER_DUP_ENTRY') {
+        error.code = 'COURSE_CODE_EXISTS';
+        error.message = '课程编号已存在。';
+      }
+      throw error;
+    }
+    return this.getCourse(id);
+  }
+
+  async updateCourse(id, updates) {
+    const fields = [];
+    const params = [];
+    const mapping = {
+      name: 'name',
+      teacherName: 'teacher_name',
+      courseCode: 'course_code',
+      term: 'term',
+      colorIndex: 'color_index',
+      sortOrder: 'sort_order',
+      status: 'status',
+    };
+    for (const [key, column] of Object.entries(mapping)) {
+      if (updates[key] !== undefined) {
+        fields.push(`${column} = ?`);
+        params.push(updates[key]);
+      }
+    }
+    if (!fields.length) return this.getCourse(id);
+    fields.push('updated_at = ?');
+    params.push(new Date(), id);
+    try {
+      const [result] = await this.pool.execute(
+        `UPDATE courses SET ${fields.join(', ')} WHERE id = ? AND deleted_at IS NULL`,
+        params,
+      );
+      if (!result.affectedRows) return null;
+    } catch (error) {
+      if (error?.code === 'ER_DUP_ENTRY') {
+        error.code = 'COURSE_CODE_EXISTS';
+        error.message = '课程编号已存在。';
+      }
+      throw error;
+    }
+    return this.getCourse(id);
+  }
+
+  async archiveCourse(id) {
+    const [result] = await this.pool.execute(
+      `UPDATE courses SET status = 'archived', updated_at = ? WHERE id = ? AND deleted_at IS NULL`,
+      [new Date(), id],
+    );
+    return result.affectedRows ? this.getCourse(id) : null;
+  }
+
   async _findStudentByHash(ownerHash, connection = this.pool) {
     const [rows] = await connection.execute(
       'SELECT id, owner_hash, alias_code FROM students WHERE owner_hash = ? LIMIT 1',
@@ -229,6 +343,8 @@ export class MySQLQuestionStore {
   _serializeQuestion(row, { withAlias = false } = {}) {
     const result = {
       id: row.id,
+      courseId: row.course_id || 'c_default',
+      courseName: row.course_name || '',
       question: row.question,
       answer: row.answer ?? '',
       createdAt: toIsoString(row.created_at),
@@ -247,6 +363,7 @@ export class MySQLQuestionStore {
 
   async addQuestion({
     ownerHash,
+    courseId = 'c_default',
     question,
     answer,
     model,
@@ -262,13 +379,14 @@ export class MySQLQuestionStore {
       const student = await this._getOrCreateStudent(connection, ownerHash);
       await connection.execute(
         `INSERT INTO questions
-          (id, student_id, question, answer, model, status,
+          (id, student_id, course_id, question, answer, model, status,
            prompt_tokens, completion_tokens, latency_ms, created_at, deleted_at,
            image_key, image_mime, image_provider, image_token, image_size_bytes)
-         VALUES (?, ?, ?, ?, ?, 'answered', ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, 'answered', ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)`,
         [
           id,
           student.id,
+          courseId,
           question,
           answer,
           String(model || '').slice(0, 80),
@@ -286,6 +404,8 @@ export class MySQLQuestionStore {
       await connection.commit();
       return {
         id,
+        courseId,
+        courseName: '',
         question,
         answer,
         createdAt: now.toISOString(),
@@ -306,26 +426,28 @@ export class MySQLQuestionStore {
     }
   }
 
-  async listForClient(ownerHash, { limit = 30, offset = 0 } = {}) {
+  async listForClient(ownerHash, { limit = 30, offset = 0, courseId = '' } = {}) {
     const safeLimit = clamp(limit, 1, 100);
     const safeOffset = clamp(offset, 0, 1_000_000);
     const student = await this._findStudentByHash(ownerHash);
     if (!student) return { total: 0, items: [] };
+    const courseClause = courseId ? ' AND q.course_id = ?' : '';
+    const courseParams = courseId ? [courseId] : [];
 
     const [[totalRow]] = await this.pool.execute(
       `SELECT COUNT(*) AS total
        FROM questions q
-       WHERE q.student_id = ? AND q.deleted_at IS NULL`,
-      [student.id],
+       WHERE q.student_id = ? AND q.deleted_at IS NULL${courseClause}`,
+      [student.id, ...courseParams],
     );
     const [rows] = await this.pool.execute(
       `SELECT ${PUBLIC_SELECT}
        FROM questions q
        JOIN students s ON s.id = q.student_id
-       WHERE q.student_id = ? AND q.deleted_at IS NULL
+       WHERE q.student_id = ? AND q.deleted_at IS NULL${courseClause}
        ORDER BY q.created_at DESC, q.id DESC
        LIMIT ? OFFSET ?`,
-      [student.id, student.id, safeLimit, safeOffset],
+      [student.id, student.id, ...courseParams, safeLimit, safeOffset],
     );
     return {
       total: toSafeNumber(totalRow.total),
@@ -365,20 +487,22 @@ export class MySQLQuestionStore {
     return rows[0] ? this._serializeQuestion(rows[0]) : null;
   }
 
-  async getCommunity(viewerHash, { limit = 30, offset = 0 } = {}) {
+  async getCommunity(viewerHash, { limit = 30, offset = 0, courseId = '' } = {}) {
     const safeLimit = clamp(limit, 1, 100);
     const safeOffset = clamp(offset, 0, 1_000_000);
     const viewer = await this._findStudentByHash(viewerHash);
     const viewerId = viewer ? Number(viewer.id) : 0;
+    const courseClause = courseId ? ' AND q.course_id = ?' : '';
+    const courseParams = courseId ? [courseId] : [];
 
     const [topRows] = await this.pool.execute(
       `SELECT ${PUBLIC_SELECT}
        FROM questions q
        JOIN students s ON s.id = q.student_id
-       WHERE q.deleted_at IS NULL
+       WHERE q.deleted_at IS NULL${courseClause}
        ORDER BY like_count DESC, q.created_at ASC, q.id ASC
        LIMIT 3`,
-      [viewerId],
+      [viewerId, ...courseParams],
     );
 
     const top = topRows.map((row) => this._serializeQuestion(row, { withAlias: true }));
@@ -390,23 +514,23 @@ export class MySQLQuestionStore {
     const [[recentTotalRow]] = await this.pool.execute(
       `SELECT COUNT(*) AS total
        FROM questions q
-       WHERE q.deleted_at IS NULL ${exclusion}`,
-      topIds,
+       WHERE q.deleted_at IS NULL ${exclusion}${courseClause}`,
+      [...topIds, ...courseParams],
     );
     const [recentRows] = await this.pool.execute(
       `SELECT ${PUBLIC_SELECT}
        FROM questions q
        JOIN students s ON s.id = q.student_id
-       WHERE q.deleted_at IS NULL ${exclusion}
+       WHERE q.deleted_at IS NULL ${exclusion}${courseClause}
        ORDER BY q.created_at DESC, q.id DESC
        LIMIT ? OFFSET ?`,
-      [viewerId, ...topIds, safeLimit, safeOffset],
+      [viewerId, ...topIds, ...courseParams, safeLimit, safeOffset],
     );
     const recentTotal = toSafeNumber(recentTotalRow.total);
     return {
       top,
       recent: recentRows.map((row) => this._serializeQuestion(row, { withAlias: true })),
-      stats: await this.stats(),
+      stats: await this.stats({ courseId }),
       recentTotal,
       hasMore: safeOffset + recentRows.length < recentTotal,
     };
@@ -462,32 +586,38 @@ export class MySQLQuestionStore {
     }
   }
 
-  async stats() {
+  async stats({ courseId = '' } = {}) {
     const todayStart = startOfBusinessDay(
       new Date(),
       this.businessTimezoneOffsetMinutes,
     );
+    const courseClause = courseId ? ' AND q.course_id = ?' : '';
+    const courseParams = courseId ? [courseId] : [];
     const queries = [
       this.pool.execute(
-        `SELECT COUNT(*) AS total FROM questions WHERE deleted_at IS NULL`,
+        `SELECT COUNT(*) AS total FROM questions q WHERE q.deleted_at IS NULL${courseClause}`,
+        courseParams,
       ),
       this.pool.execute(
-        `SELECT COUNT(DISTINCT student_id) AS total
-         FROM questions WHERE deleted_at IS NULL`,
+        `SELECT COUNT(DISTINCT q.student_id) AS total
+         FROM questions q WHERE q.deleted_at IS NULL${courseClause}`,
+        courseParams,
       ),
       this.pool.execute(
         `SELECT COUNT(*) AS total
          FROM likes l JOIN questions q ON q.id = l.question_id
-         WHERE q.deleted_at IS NULL`,
+         WHERE q.deleted_at IS NULL${courseClause}`,
+        courseParams,
       ),
       this.pool.execute(
         `SELECT COUNT(*) AS total
-         FROM questions WHERE deleted_at IS NULL AND created_at >= ?`,
-        [todayStart],
+         FROM questions q WHERE q.deleted_at IS NULL AND q.created_at >= ?${courseClause}`,
+        [todayStart, ...courseParams],
       ),
       this.pool.execute(
         `SELECT COUNT(*) AS total
-         FROM questions WHERE deleted_at IS NULL AND status = 'answered'`,
+         FROM questions q WHERE q.deleted_at IS NULL AND q.status = 'answered'${courseClause}`,
+        courseParams,
       ),
     ];
     const results = await Promise.all(queries);
@@ -516,10 +646,13 @@ export class MySQLQuestionStore {
     return labels;
   }
 
-  async getAdminQuestions() {
-    const [rows] = await this.pool.query(
-      `SELECT q.id, q.question, q.answer, q.model, q.status, q.latency_ms,
+  async getAdminQuestions({ courseId = '' } = {}) {
+    const courseClause = courseId ? ' AND q.course_id = ?' : '';
+    const params = courseId ? [courseId] : [];
+    const [rows] = await this.pool.execute(
+      `SELECT q.id, q.course_id, q.question, q.answer, q.model, q.status, q.latency_ms,
               q.created_at, q.image_token, q.image_mime, q.image_size_bytes, s.owner_hash,
+              (SELECT c.name FROM courses c WHERE c.id = q.course_id) AS course_name,
               (SELECT COUNT(*) FROM likes l WHERE l.question_id = q.id) AS like_count,
               (SELECT COUNT(*) FROM question_comments c
                WHERE c.question_id = q.id AND c.deleted_at IS NULL) AS comment_count,
@@ -528,12 +661,15 @@ export class MySQLQuestionStore {
                  AND c.author_type = 'teacher') AS teacher_comment_count
        FROM questions q
        JOIN students s ON s.id = q.student_id
-       WHERE q.deleted_at IS NULL
+       WHERE q.deleted_at IS NULL${courseClause}
        ORDER BY q.created_at DESC, q.id DESC`,
+      params,
     );
     const labels = await this._getStudentLabels();
     return rows.map((row) => ({
       id: row.id,
+      courseId: row.course_id || 'c_default',
+      courseName: row.course_name || '',
       studentLabel: labels.get(row.owner_hash) ?? '学生 --',
       question: row.question,
       answer: row.answer ?? '',
@@ -550,18 +686,23 @@ export class MySQLQuestionStore {
     }));
   }
 
-  async getQuestionsForExport(ids = []) {
+  async getQuestionsForExport(ids = [], { courseId = '' } = {}) {
     const idSet = new Set(ids.filter(Boolean));
     const params = [];
     let filter = '';
     if (idSet.size) {
       const values = [...idSet];
-      filter = `AND q.id IN (${values.map(() => '?').join(', ')})`;
+      filter += ` AND q.id IN (${values.map(() => '?').join(', ')})`;
       params.push(...values);
     }
+    if (courseId) {
+      filter += ' AND q.course_id = ?';
+      params.push(courseId);
+    }
     const [rows] = await this.pool.execute(
-      `SELECT q.id, q.question, q.answer, q.model, q.status, q.latency_ms,
+      `SELECT q.id, q.course_id, q.question, q.answer, q.model, q.status, q.latency_ms,
               q.created_at, s.owner_hash,
+              (SELECT c.name FROM courses c WHERE c.id = q.course_id) AS course_name,
               (SELECT COUNT(*) FROM likes l WHERE l.question_id = q.id) AS like_count
        FROM questions q
        JOIN students s ON s.id = q.student_id
@@ -572,6 +713,8 @@ export class MySQLQuestionStore {
     const labels = await this._getStudentLabels();
     return rows.map((row) => ({
       id: row.id,
+      courseId: row.course_id || 'c_default',
+      courseName: row.course_name || '',
       question: row.question,
       answer: row.answer ?? '',
       createdAt: toIsoString(row.created_at),
@@ -921,9 +1064,218 @@ export class MySQLQuestionStore {
     );
   }
 
+  async getQuestionMeta(id) {
+    const [rows] = await this.pool.execute(
+      `SELECT q.id, q.course_id, s.owner_hash
+       FROM questions q JOIN students s ON s.id = q.student_id
+       WHERE q.id = ? AND q.deleted_at IS NULL LIMIT 1`,
+      [id],
+    );
+    const row = rows[0];
+    return row
+      ? { id: row.id, ownerHash: row.owner_hash, courseId: row.course_id || 'c_default' }
+      : null;
+  }
+
+  async getCommentMeta(id) {
+    const [rows] = await this.pool.execute(
+      `SELECT c.id, c.question_id, c.author_type, c.student_owner_hash,
+              q.course_id, s.owner_hash AS question_owner_hash
+       FROM question_comments c
+       JOIN questions q ON q.id = c.question_id
+       JOIN students s ON s.id = q.student_id
+       WHERE c.id = ? AND c.deleted_at IS NULL LIMIT 1`,
+      [id],
+    );
+    const row = rows[0];
+    return row
+      ? {
+          id: row.id,
+          questionId: row.question_id,
+          authorType: row.author_type,
+          studentOwnerHash: row.student_owner_hash || '',
+          questionOwnerHash: row.question_owner_hash || '',
+          courseId: row.course_id || 'c_default',
+        }
+      : null;
+  }
+
+  async createCourseNotice({ id, courseId, type, title, body, resourceId = '' }) {
+    await this.pool.execute(
+      `INSERT INTO course_notices
+        (id, course_id, type, title, body, resource_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [id, courseId, type, title, body || null, resourceId || null, new Date()],
+    );
+    return { id, courseId, type, title, body, resourceId };
+  }
+
+  async listCourseNotices(ownerHash, { limit = 30, offset = 0 } = {}) {
+    const safeLimit = clamp(limit, 1, 100);
+    const safeOffset = clamp(offset, 0, 1_000_000);
+    const [[totalRow]] = await this.pool.execute(
+      'SELECT COUNT(*) AS total FROM course_notices',
+    );
+    const [rows] = await this.pool.execute(
+      `SELECT n.*, c.name AS course_name,
+              EXISTS(
+                SELECT 1 FROM notice_reads r
+                WHERE r.notice_id = n.id AND r.owner_hash = ?
+              ) AS is_read
+       FROM course_notices n
+       JOIN courses c ON c.id = n.course_id
+       ORDER BY n.created_at DESC, n.id DESC
+       LIMIT ? OFFSET ?`,
+      [ownerHash, safeLimit, safeOffset],
+    );
+    return {
+      total: toSafeNumber(totalRow.total),
+      items: rows.map((row) => ({
+        id: row.id,
+        box: 'notice',
+        type: row.type,
+        courseId: row.course_id,
+        courseName: row.course_name || '',
+        title: row.title,
+        body: row.body || '',
+        resourceId: row.resource_id || '',
+        createdAt: toIsoString(row.created_at),
+        read: Boolean(Number(row.is_read)),
+      })),
+      hasMore: safeOffset + rows.length < toSafeNumber(totalRow.total),
+    };
+  }
+
+  async markNoticeRead(ownerHash, noticeId) {
+    const [rows] = await this.pool.execute(
+      'SELECT id FROM course_notices WHERE id = ? LIMIT 1',
+      [noticeId],
+    );
+    if (!rows[0]) return false;
+    await this.pool.execute(
+      `INSERT INTO notice_reads (notice_id, owner_hash, read_at)
+       VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE read_at = read_at`,
+      [noticeId, ownerHash, new Date()],
+    );
+    return true;
+  }
+
+  async markAllNoticesRead(ownerHash) {
+    await this.pool.execute(
+      `INSERT IGNORE INTO notice_reads (notice_id, owner_hash, read_at)
+       SELECT id, ?, ? FROM course_notices`,
+      [ownerHash, new Date()],
+    );
+    return true;
+  }
+
+  async createStudentEvent({
+    id,
+    courseId,
+    recipientHash,
+    actorHash,
+    type,
+    title,
+    body,
+    questionId = '',
+    commentId = '',
+  }) {
+    await this.pool.execute(
+      `INSERT INTO student_events
+        (id, course_id, recipient_hash, actor_hash, type, title, body,
+         question_id, comment_id, read_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)`,
+      [
+        id,
+        courseId,
+        recipientHash,
+        actorHash || null,
+        type,
+        title,
+        body || null,
+        questionId || null,
+        commentId || null,
+        new Date(),
+      ],
+    );
+    return { id };
+  }
+
+  async listStudentEvents(ownerHash, { limit = 30, offset = 0 } = {}) {
+    const safeLimit = clamp(limit, 1, 100);
+    const safeOffset = clamp(offset, 0, 1_000_000);
+    const [[totalRow]] = await this.pool.execute(
+      'SELECT COUNT(*) AS total FROM student_events WHERE recipient_hash = ?',
+      [ownerHash],
+    );
+    const [rows] = await this.pool.execute(
+      `SELECT e.*, c.name AS course_name
+       FROM student_events e
+       JOIN courses c ON c.id = e.course_id
+       WHERE e.recipient_hash = ?
+       ORDER BY e.created_at DESC, e.id DESC
+       LIMIT ? OFFSET ?`,
+      [ownerHash, safeLimit, safeOffset],
+    );
+    return {
+      total: toSafeNumber(totalRow.total),
+      items: rows.map((row) => ({
+        id: row.id,
+        box: 'comment',
+        type: row.type,
+        courseId: row.course_id,
+        courseName: row.course_name || '',
+        title: row.title,
+        body: row.body || '',
+        questionId: row.question_id || '',
+        commentId: row.comment_id || '',
+        createdAt: toIsoString(row.created_at),
+        read: Boolean(row.read_at),
+      })),
+      hasMore: safeOffset + rows.length < toSafeNumber(totalRow.total),
+    };
+  }
+
+  async markStudentEventRead(ownerHash, eventId) {
+    const [result] = await this.pool.execute(
+      `UPDATE student_events SET read_at = COALESCE(read_at, ?)
+       WHERE id = ? AND recipient_hash = ?`,
+      [new Date(), eventId, ownerHash],
+    );
+    return result.affectedRows > 0;
+  }
+
+  async markAllStudentEventsRead(ownerHash) {
+    await this.pool.execute(
+      `UPDATE student_events SET read_at = COALESCE(read_at, ?)
+       WHERE recipient_hash = ? AND read_at IS NULL`,
+      [new Date(), ownerHash],
+    );
+    return true;
+  }
+
+  async messageSummary(ownerHash) {
+    const [[row]] = await this.pool.execute(
+      `SELECT
+         (SELECT COUNT(*) FROM course_notices n
+          WHERE NOT EXISTS (
+            SELECT 1 FROM notice_reads r
+            WHERE r.notice_id = n.id AND r.owner_hash = ?
+          )) AS notice_count,
+         (SELECT COUNT(*) FROM student_events e
+          WHERE e.recipient_hash = ? AND e.read_at IS NULL) AS comment_count`,
+      [ownerHash, ownerHash],
+    );
+    const notice = toSafeNumber(row.notice_count);
+    const comment = toSafeNumber(row.comment_count);
+    return { notice, comment, total: notice + comment };
+  }
+
   _serializeResource(row) {
     return {
       id: row.id,
+      courseId: row.course_id || 'c_default',
+      courseName: row.course_name || '',
       title: row.title,
       category: row.category,
       description: row.description ?? '',
@@ -938,7 +1290,7 @@ export class MySQLQuestionStore {
     };
   }
 
-  async listResources({ category = '', includeDeleted = false } = {}) {
+  async listResources({ category = '', includeDeleted = false, courseId = '' } = {}) {
     const clauses = [];
     const params = [];
     if (!includeDeleted) clauses.push('deleted_at IS NULL');
@@ -946,12 +1298,17 @@ export class MySQLQuestionStore {
       clauses.push('category = ?');
       params.push(category);
     }
+    if (courseId) {
+      clauses.push('course_id = ?');
+      params.push(courseId);
+    }
     const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
     const [rows] = await this.pool.execute(
-      `SELECT id, title, category, description, file_name, extension, mime_type,
-              size_bytes, storage_provider, storage_key, created_at, updated_at
-       FROM resources ${where}
-       ORDER BY updated_at DESC, id DESC`,
+      `SELECT r.id, r.course_id, (SELECT c.name FROM courses c WHERE c.id = r.course_id) AS course_name,
+              r.title, r.category, r.description, r.file_name, r.extension, r.mime_type,
+              r.size_bytes, r.storage_provider, r.storage_key, r.created_at, r.updated_at
+       FROM resources r ${where.replace(/\b(deleted_at|category|course_id)\b/g, 'r.$1')}
+       ORDER BY r.updated_at DESC, r.id DESC`,
       params,
     );
     return rows.map((row) => this._serializeResource(row));
@@ -959,9 +1316,10 @@ export class MySQLQuestionStore {
 
   async getResource(id) {
     const [rows] = await this.pool.execute(
-      `SELECT id, title, category, description, file_name, extension, mime_type,
-              size_bytes, storage_provider, storage_key, created_at, updated_at
-       FROM resources WHERE id = ? AND deleted_at IS NULL LIMIT 1`,
+      `SELECT r.id, r.course_id, (SELECT c.name FROM courses c WHERE c.id = r.course_id) AS course_name,
+              r.title, r.category, r.description, r.file_name, r.extension, r.mime_type,
+              r.size_bytes, r.storage_provider, r.storage_key, r.created_at, r.updated_at
+       FROM resources r WHERE r.id = ? AND r.deleted_at IS NULL LIMIT 1`,
       [id],
     );
     return rows[0] ? this._serializeResource(rows[0]) : null;
@@ -969,6 +1327,7 @@ export class MySQLQuestionStore {
 
   async createResource({
     id,
+    courseId = 'c_default',
     title,
     category,
     description = '',
@@ -982,11 +1341,12 @@ export class MySQLQuestionStore {
   }) {
     await this.pool.execute(
       `INSERT INTO resources
-        (id, title, category, description, file_name, extension, mime_type,
+        (id, course_id, title, category, description, file_name, extension, mime_type,
          size_bytes, storage_provider, storage_key, created_at, updated_at, deleted_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
       [
         id,
+        courseId,
         title,
         category,
         description || null,
@@ -1007,11 +1367,12 @@ export class MySQLQuestionStore {
     const now = new Date();
     const [result] = await this.pool.execute(
       `UPDATE resources SET
-         title = ?, category = ?, description = ?, file_name = ?, extension = ?,
+         course_id = ?, title = ?, category = ?, description = ?, file_name = ?, extension = ?,
          mime_type = ?, size_bytes = ?, storage_provider = ?, storage_key = ?,
          updated_at = ?
        WHERE id = ? AND deleted_at IS NULL`,
       [
+        resource.courseId || 'c_default',
         resource.title,
         resource.category,
         resource.description || null,
@@ -1052,8 +1413,13 @@ export class MySQLQuestionStore {
         `SELECT id, owner_hash, alias_code, created_at, last_seen_at
          FROM students ORDER BY id ASC`,
       );
+      const [courseRows] = await connection.query(
+        `SELECT id, name, teacher_name, course_code, term, color_index, sort_order,
+                status, created_at, updated_at, deleted_at
+         FROM courses ORDER BY sort_order ASC, created_at ASC`,
+      );
       const [questionRows] = await connection.query(
-        `SELECT id, student_id, question, answer, model, status,
+        `SELECT id, student_id, course_id, question, answer, model, status,
                 prompt_tokens, completion_tokens, latency_ms, created_at, deleted_at,
                 image_key, image_mime, image_provider, image_token, image_size_bytes
          FROM questions ORDER BY created_at ASC, id ASC`,
@@ -1063,7 +1429,7 @@ export class MySQLQuestionStore {
          FROM likes ORDER BY created_at ASC, question_id ASC, student_id ASC`,
       );
       const [resourceRows] = await connection.query(
-        `SELECT id, title, category, description, file_name, extension, mime_type,
+        `SELECT id, course_id, title, category, description, file_name, extension, mime_type,
                 size_bytes, storage_provider, storage_key, created_at, updated_at, deleted_at
          FROM resources ORDER BY created_at ASC, id ASC`,
       );
@@ -1076,11 +1442,25 @@ export class MySQLQuestionStore {
         `SELECT comment_id, actor_type, actor_hash, created_at
          FROM comment_likes ORDER BY created_at ASC, comment_id ASC, actor_hash ASC`,
       );
+      const [noticeRows] = await connection.query(
+        `SELECT id, course_id, type, title, body, resource_id, created_at
+         FROM course_notices ORDER BY created_at ASC, id ASC`,
+      );
+      const [noticeReadRows] = await connection.query(
+        `SELECT notice_id, owner_hash, read_at
+         FROM notice_reads ORDER BY notice_id ASC, owner_hash ASC`,
+      );
+      const [eventRows] = await connection.query(
+        `SELECT id, course_id, recipient_hash, actor_hash, type, title, body,
+                question_id, comment_id, read_at, created_at
+         FROM student_events ORDER BY created_at ASC, id ASC`,
+      );
       await connection.commit();
       return {
         schemaVersion: SCHEMA_VERSION,
         exportedAt: new Date().toISOString(),
         counts: {
+          courses: courseRows.length,
           teachers: teacherRows.length,
           students: studentRows.length,
           questions: questionRows.length,
@@ -1088,7 +1468,22 @@ export class MySQLQuestionStore {
           comments: commentRows.length,
           commentLikes: commentLikeRows.length,
           resources: resourceRows.length,
+          notices: noticeRows.length,
+          events: eventRows.length,
         },
+        courses: courseRows.map((row) => ({
+          id: row.id,
+          name: row.name,
+          teacherName: row.teacher_name,
+          courseCode: row.course_code,
+          term: row.term || '',
+          colorIndex: Number(row.color_index || 0),
+          sortOrder: Number(row.sort_order || 0),
+          status: row.status || 'active',
+          createdAt: toIsoString(row.created_at),
+          updatedAt: toIsoString(row.updated_at),
+          deletedAt: toIsoString(row.deleted_at),
+        })),
         teachers: teacherRows.map((row) => ({
           id: Number(row.id),
           email: row.email,
@@ -1108,6 +1503,7 @@ export class MySQLQuestionStore {
         questions: questionRows.map((row) => ({
           id: row.id,
           studentId: Number(row.student_id),
+          courseId: row.course_id || 'c_default',
           question: row.question,
           answer: row.answer ?? '',
           model: row.model,
@@ -1149,6 +1545,7 @@ export class MySQLQuestionStore {
         })),
         resources: resourceRows.map((row) => ({
           id: row.id,
+          courseId: row.course_id || 'c_default',
           title: row.title,
           category: row.category,
           description: row.description ?? '',
@@ -1161,6 +1558,33 @@ export class MySQLQuestionStore {
           createdAt: toIsoString(row.created_at),
           updatedAt: toIsoString(row.updated_at),
           deletedAt: toIsoString(row.deleted_at),
+        })),
+        courseNotices: noticeRows.map((row) => ({
+          id: row.id,
+          courseId: row.course_id,
+          type: row.type,
+          title: row.title,
+          body: row.body || '',
+          resourceId: row.resource_id || '',
+          createdAt: toIsoString(row.created_at),
+        })),
+        noticeReads: noticeReadRows.map((row) => ({
+          noticeId: row.notice_id,
+          ownerHash: row.owner_hash,
+          readAt: toIsoString(row.read_at),
+        })),
+        studentEvents: eventRows.map((row) => ({
+          id: row.id,
+          courseId: row.course_id,
+          recipientHash: row.recipient_hash,
+          actorHash: row.actor_hash || '',
+          type: row.type,
+          title: row.title,
+          body: row.body || '',
+          questionId: row.question_id || '',
+          commentId: row.comment_id || '',
+          readAt: toIsoString(row.read_at),
+          createdAt: toIsoString(row.created_at),
         })),
       };
     } catch (error) {
@@ -1183,10 +1607,14 @@ export class MySQLQuestionStore {
         );
       }
     }
+    const courses = Array.isArray(snapshot.courses) ? snapshot.courses : [];
     const resources = Array.isArray(snapshot.resources) ? snapshot.resources : [];
     const teachers = Array.isArray(snapshot.teachers) ? snapshot.teachers : [];
     const comments = Array.isArray(snapshot.comments) ? snapshot.comments : [];
     const commentLikes = Array.isArray(snapshot.commentLikes) ? snapshot.commentLikes : [];
+    const courseNotices = Array.isArray(snapshot.courseNotices) ? snapshot.courseNotices : [];
+    const noticeReads = Array.isArray(snapshot.noticeReads) ? snapshot.noticeReads : [];
+    const studentEvents = Array.isArray(snapshot.studentEvents) ? snapshot.studentEvents : [];
     const [[counts]] = await this.pool.query(
       `SELECT
          (SELECT COUNT(*) FROM teachers) AS teachers,
@@ -1212,6 +1640,39 @@ export class MySQLQuestionStore {
     const connection = await this.pool.getConnection();
     try {
       await connection.beginTransaction();
+      if (courses.length) {
+        await connection.query("DELETE FROM courses WHERE id = 'c_default'");
+        await insertRows(
+          connection,
+          'courses',
+          [
+            'id',
+            'name',
+            'teacher_name',
+            'course_code',
+            'term',
+            'color_index',
+            'sort_order',
+            'status',
+            'created_at',
+            'updated_at',
+            'deleted_at',
+          ],
+          courses.map((course) => ({
+            id: course.id,
+            name: course.name,
+            teacher_name: course.teacherName,
+            course_code: course.courseCode,
+            term: course.term || null,
+            color_index: Number(course.colorIndex || 0),
+            sort_order: Number(course.sortOrder || 0),
+            status: course.status || 'active',
+            created_at: toDate(course.createdAt, 'courses.createdAt'),
+            updated_at: toDate(course.updatedAt || course.createdAt, 'courses.updatedAt'),
+            deleted_at: course.deletedAt ? toDate(course.deletedAt, 'courses.deletedAt') : null,
+          })),
+        );
+      }
       await insertRows(
         connection,
         'teachers',
@@ -1244,6 +1705,7 @@ export class MySQLQuestionStore {
         [
           'id',
           'student_id',
+          'course_id',
           'question',
           'answer',
           'model',
@@ -1262,6 +1724,7 @@ export class MySQLQuestionStore {
         snapshot.questions.map((question) => ({
           id: question.id,
           student_id: Number(question.studentId),
+          course_id: question.courseId || 'c_default',
           question: question.question,
           answer: question.answer ?? '',
           model: question.model ? String(question.model).slice(0, 80) : null,
@@ -1336,6 +1799,7 @@ export class MySQLQuestionStore {
         'resources',
         [
           'id',
+          'course_id',
           'title',
           'category',
           'description',
@@ -1351,6 +1815,7 @@ export class MySQLQuestionStore {
         ],
         resources.map((resource) => ({
           id: resource.id,
+          course_id: resource.courseId || 'c_default',
           title: resource.title,
           category: resource.category,
           description: resource.description || null,
@@ -1370,8 +1835,63 @@ export class MySQLQuestionStore {
             : null,
         })),
       );
+      await insertRows(
+        connection,
+        'course_notices',
+        ['id', 'course_id', 'type', 'title', 'body', 'resource_id', 'created_at'],
+        courseNotices.map((notice) => ({
+          id: notice.id,
+          course_id: notice.courseId,
+          type: notice.type,
+          title: notice.title,
+          body: notice.body || null,
+          resource_id: notice.resourceId || null,
+          created_at: toDate(notice.createdAt, 'courseNotices.createdAt'),
+        })),
+      );
+      await insertRows(
+        connection,
+        'notice_reads',
+        ['notice_id', 'owner_hash', 'read_at'],
+        noticeReads.map((read) => ({
+          notice_id: read.noticeId,
+          owner_hash: read.ownerHash,
+          read_at: toDate(read.readAt, 'noticeReads.readAt'),
+        })),
+      );
+      await insertRows(
+        connection,
+        'student_events',
+        [
+          'id',
+          'course_id',
+          'recipient_hash',
+          'actor_hash',
+          'type',
+          'title',
+          'body',
+          'question_id',
+          'comment_id',
+          'read_at',
+          'created_at',
+        ],
+        studentEvents.map((event) => ({
+          id: event.id,
+          course_id: event.courseId,
+          recipient_hash: event.recipientHash,
+          actor_hash: event.actorHash || null,
+          type: event.type,
+          title: event.title,
+          body: event.body || null,
+          question_id: event.questionId || null,
+          comment_id: event.commentId || null,
+          read_at: event.readAt ? toDate(event.readAt, 'studentEvents.readAt') : null,
+          created_at: toDate(event.createdAt, 'studentEvents.createdAt'),
+        })),
+      );
       await connection.commit();
       return {
+        courses: courses.length,
         teachers: teachers.length,
         students: snapshot.students.length,
         questions: snapshot.questions.length,
@@ -1379,6 +1899,8 @@ export class MySQLQuestionStore {
         comments: comments.length,
         commentLikes: commentLikes.length,
         resources: resources.length,
+        notices: courseNotices.length,
+        events: studentEvents.length,
       };
     } catch (error) {
       await connection.rollback().catch(() => {});

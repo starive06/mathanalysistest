@@ -1,0 +1,84 @@
+<view class="page">
+  <view class="message-hero">
+    <view class="hero-bell">
+      <view class="bell-body"></view>
+      <view class="bell-clapper"></view>
+    </view>
+    <view class="hero-copy">
+      <text class="hero-kicker">STAY IN THE LOOP</text>
+      <text class="hero-title">消息</text>
+      <text class="hero-sub">课程新内容、回复和点赞，都在这里。</text>
+    </view>
+    <view class="hero-unread" wx:if="{{summary.total}}">
+      <text class="hero-unread-number">{{summary.total}}</text>
+      <text class="hero-unread-label">未读</text>
+    </view>
+  </view>
+
+  <view class="message-tabs">
+    <view
+      class="message-tab {{box === 'notice' ? 'active' : ''}}"
+      data-box="notice"
+      bindtap="switchBox"
+    >
+      <text>通知</text>
+      <view class="tab-count" wx:if="{{summary.notice}}">{{summary.notice}}</view>
+    </view>
+    <view
+      class="message-tab {{box === 'comment' ? 'active' : ''}}"
+      data-box="comment"
+      bindtap="switchBox"
+    >
+      <text>评论</text>
+      <view class="tab-count" wx:if="{{summary.comment}}">{{summary.comment}}</view>
+    </view>
+    <button class="mark-all" bindtap="markAllRead" wx:if="{{messages.length}}">全部已读</button>
+  </view>
+
+  <view class="message-list" wx:if="{{messages.length}}">
+    <view
+      wx:for="{{messages}}"
+      wx:key="id"
+      class="message-card {{item.read ? 'is-read' : ''}}"
+      data-id="{{item.id}}"
+      bindtap="openMessage"
+      hover-class="message-card-hover"
+      hover-stay-time="60"
+    >
+      <view class="message-card-head">
+        <view class="message-type {{box}}">{{item.typeLabel}}</view>
+        <text class="message-time">{{item.timeText}}</text>
+      </view>
+      <view class="message-title-line">
+        <view class="unread-dot" wx:if="{{!item.read}}"></view>
+        <text class="message-title">{{item.title}}</text>
+      </view>
+      <text class="message-body" wx:if="{{item.body}}">{{item.body}}</text>
+      <view class="message-card-foot">
+        <text class="message-course">{{item.courseName || '课程'}}</text>
+        <text class="message-open">查看详情 →</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="message-loading" wx:elif="{{loading}}">
+    <view class="loading-dot"></view>
+    <view class="loading-dot loading-dot-two"></view>
+    <view class="loading-dot loading-dot-three"></view>
+    <text>正在读取消息</text>
+  </view>
+
+  <view class="message-empty" wx:else>
+    <view class="empty-symbol">{{box === 'notice' ? '⌁' : '◌'}}</view>
+    <text class="empty-title">{{box === 'notice' ? '暂时没有课程通知' : '暂时没有新的互动'}}</text>
+    <text class="empty-copy">{{box === 'notice' ? '老师发布新内容后会出现在这里。' : '同学评论或点赞你的问题后会出现在这里。'}}</text>
+    <button class="retry-button" bindtap="retry">刷新</button>
+  </view>
+
+  <view class="message-error" wx:if="{{loadError}}">
+    <text>{{loadError}}</text>
+    <button class="retry-button" bindtap="retry">重试</button>
+  </view>
+
+  <view class="message-bottom-space"></view>
+</view>

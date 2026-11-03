@@ -1,5 +1,6 @@
 const api = require('../../utils/api');
 const { formatClock } = require('../../utils/format');
+const { getActiveCourse, requireActiveCourse } = require('../../utils/course');
 
 const SUGGESTIONS = [
   {
@@ -59,17 +60,23 @@ Page({
     inputFocused: false,
     apiStatus: 'checking',
     apiStatusText: '正在连接 DeepSeek',
+    activeCourse: null,
   },
 
-  onLoad() {
+  onLoad(options) {
     this._requestSeq = 0;
+    this._initialQuestionId = options?.questionId || '';
     this.checkService();
   },
 
   onShow() {
+    const course = requireActiveCourse();
+    if (!course) return;
+    this.setData({ activeCourse: course });
     this.syncTabBar();
     const app = getApp();
-    const pendingId = app.globalData.pendingQuestionId;
+    const pendingId = this._initialQuestionId || app.globalData.pendingQuestionId;
+    this._initialQuestionId = '';
     if (pendingId) {
       app.globalData.pendingQuestionId = null;
       this.loadRecord(pendingId);
@@ -88,14 +95,12 @@ Page({
   },
 
   syncTabBar() {
-    const tabBar = typeof this.getTabBar === 'function' && this.getTabBar();
-    if (!tabBar) return;
-    tabBar.setSelected(0);
-    tabBar.setHidden(false);
+    const tabBar = this.selectComponent('#workspaceTabBar');
+    if (tabBar) tabBar.setHidden(false);
   },
 
   setTabBarHidden(hidden) {
-    const tabBar = typeof this.getTabBar === 'function' && this.getTabBar();
+    const tabBar = this.selectComponent('#workspaceTabBar');
     if (tabBar) tabBar.setHidden(hidden);
   },
 
@@ -295,6 +300,11 @@ Page({
       wx.showToast({ title: '请补充完整问题', icon: 'none' });
       return;
     }
+    const course = this.data.activeCourse || getActiveCourse();
+    if (!course?.id) {
+      requireActiveCourse();
+      return;
+    }
     const context = buildContext(this.data.messages);
     wx.hideKeyboard();
     this.setData({
@@ -360,9 +370,10 @@ Page({
     );
 
     try {
+      const courseId = this.data.activeCourse?.id || getActiveCourse()?.id || '';
       const record = imagePath
-        ? await api.askQuestionWithImage(question, options.context, imagePath)
-        : await api.askQuestion(question, options.context);
+        ? await api.askQuestionWithImage(question, options.context, imagePath, courseId)
+        : await api.askQuestion(question, options.context, courseId);
       if (seq !== this._requestSeq) return;
       const assistantMessage = {
         id: `answer-${record.id}`,

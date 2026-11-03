@@ -23,13 +23,17 @@ DeepSeek API Key 只保存在服务端，不会进入小程序包，也不会发
 
 | 需求 | 实现 |
 | --- | --- |
-| 微信风格界面，底部四列图标 | 自定义 TabBar：答疑 / 我的 / 同学圈 / 资源，书本造型图标 |
+| 微信风格界面，外层课程导航 | 外层「课堂 / 消息」两个 Tab；进入课程后使用四个内部 Tab：答疑 / 我的 / 同学圈 / 资源 |
+| 学生课堂列表 | 滚动课程卡片，展示课程名称、教师姓名、课程编号、学期和问题数；拟物书本图标 |
+| 学生消息中心 | 「通知 / 评论」双栏；通知展示教师发布/更新资源，评论展示问题评论、教师回复、问题和评论点赞；未读徽标 |
+| 课程划分 | 问题、历史、同学圈、资源、评论、消息全部按课程隔离；课程可创建、编辑、归档 |
 | 第一列对话界面，左侧白色 AI 气泡，右侧学生绿色气泡 | 聊天气泡、头像、时间、长按复制、错误重试、连续追问上下文 |
 | 答疑支持图片输入 | 相册/拍照选择一张题目图片，可配文字或不配文字发送，调用 DeepSeek 视觉模型；历史提问和同学圈可回看 |
 | 第二列学生历史问题，逐行展示，可跳转 | 我的提问列表、分页加载、下拉刷新；点击带入对话页继续追问 |
 | 第三列全体学生提问，匿名排列，前三个高赞，其余按时间 | 匿名同学编号、Top 3 高赞卡片、最新提问、点赞（每人每题一次） |
 | 第四列学习资源 | 书本图标 Tab；学生按讲义/课件/作业题/答案/练习题/模拟试卷浏览并打开 |
-| 教师上传和修改教学资源 | 教师后台「教学资源」页：上传、编辑标题/分类/简介、替换文件、删除；支持 PPT/Word/PDF |
+| 教师上传和修改教学资源 | 教师后台「教学资源」页：上传、编辑标题/分类/简介/所属课程、替换文件、删除；支持 PPT/Word/PDF |
+| 教师课程管理 | 顶部课程选择器；全部课程/单课程切换；创建、编辑、归档课程；统计、导出、资源均随课程变化 |
 | 教师邮箱账号 | 注册、邮箱登录、修改教师名称/对外展示 ID/登录邮箱、修改密码；旧教师口令仍可应急登录 |
 | 教师评论与评论点赞 | 教师后台「查看」弹窗内发表评论、给学生评论点赞；教师评论在同学圈置顶 |
 | 同学圈评论区 | 每个匿名问题可展开评论区，学生和教师都能评论、给评论点赞 |
@@ -37,8 +41,8 @@ DeepSeek API Key 只保存在服务端，不会进入小程序包，也不会发
 | 服务号推送 | 教师发表评论后，已绑定小程序 openid 且关注服务号的学生收到模板消息（需配置） |
 | 教师端导出全部问题 | 教师登录后查看全部记录，导出 Markdown 与 Word；支持全量、筛选结果或勾选导出 |
 | 后端接入 DeepSeek API | `POST /api/questions` 内部调用 DeepSeek Chat Completions，服务端保存回答 |
-| 线上数据保存 | MySQL 8 存储学生哈希身份、问答、点赞、教师账号、评论和推送记录；JSON 仅作为本地演示模式 |
-| 数据备份 | COS 每日自动备份 + 教师后台手动备份；支持恢复到空数据库 |
+| 线上数据保存 | MySQL 8 存储学生哈希身份、课程、问答、点赞、教师账号、评论、通知和推送记录；JSON 仅作为本地演示模式 |
+| 数据备份 | COS 每日自动备份 + 教师后台手动备份；包含课程、通知和互动消息；支持恢复到空数据库 |
 
 ### 界面预览
 
@@ -69,11 +73,15 @@ DeepSeek API Key 只保存在服务端，不会进入小程序包，也不会发
 ```text
 math-analysis-tutor/
 ├─ miniprogram/                 # 微信小程序
-│  ├─ pages/chat/               # 对话页
-│  ├─ pages/history/            # 我的提问
-│  ├─ pages/community/          # 匿名同学圈 + 点赞 + 评论区
-│  ├─ pages/resources/          # 第四列：学习资源
-│  ├─ custom-tab-bar/           # 自定义底部四栏
+│  ├─ pages/courses/            # 外层「课堂」课程列表
+│  ├─ pages/messages/           # 外层「消息」通知/评论
+│  ├─ pages/chat/               # 课程内：对话页
+│  ├─ pages/history/            # 课程内：我的提问
+│  ├─ pages/community/          # 课程内：匿名同学圈 + 点赞 + 评论区
+│  ├─ pages/resources/          # 课程内：学习资源
+│  ├─ components/workspace-tab-bar/ # 课程内四栏
+│  ├─ components/course-context/    # 课程上下文/消息入口
+│  ├─ custom-tab-bar/           # 外层课堂/消息两栏
 │  ├─ utils/api.js              # wx.request / callContainer 封装
 │  ├─ utils/client.js           # 本机匿名身份
 │  ├─ utils/format.js           # 时间/摘要格式化
@@ -90,6 +98,8 @@ math-analysis-tutor/
 │  ├─ src/lib/backup.js         # COS / 本地备份与定时任务
 │  ├─ src/lib/resource-storage.js # 资源文件 COS/本地存储
 │  ├─ src/lib/resource-service.js # 资源上传、修改、下载、类型校验
+│  ├─ src/lib/course-service.js # 课程创建/选择/归档
+│  ├─ src/lib/message-service.js # 通知/评论消息读写
 │  ├─ src/lib/question-image-service.js # 答疑图片校验/存储/读取
 │  ├─ src/lib/auth.js           # 密码哈希、会话 token、评论校验
 │  ├─ src/lib/teacher-service.js # 教师注册/登录/资料/密码修改
@@ -380,12 +390,17 @@ Content-Type: application/json
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | GET | `/api/health` | 服务/数据库状态、DeepSeek 是否已配置；数据库不可用时返回 503 |
-| POST | `/api/questions` | 提问；JSON 纯文字或 multipart（`question` + `image`）图片提问 |
+| GET | `/api/courses` | 当前可选的 active 课程（含问题/资源数量） |
+| GET | `/api/courses/:id` | 单门课程 |
+| GET | `/api/messages/summary` | 学生通知/评论未读数 |
+| GET | `/api/messages?box=notice|comment` | 学生消息列表 |
+| POST | `/api/messages/read` | 标记单条/全部消息已读 |
+| POST | `/api/questions` | 提问；JSON 纯文字或 multipart（`question` + `image` + `courseId`）图片提问 |
 | GET | `/api/images/:token` | 读取答疑图片（随机 token，公开只读） |
-| GET | `/api/questions/mine?limit=30&offset=0` | 我的历史提问，含教师评论 |
+| GET | `/api/questions/mine?limit=30&offset=0&courseId=` | 我的历史提问，含教师评论 |
 | GET | `/api/questions/:id` | 单条问答 |
 | POST | `/api/questions/:id/like` | 切换点赞（同一匿名身份只能赞一次） |
-| GET | `/api/community?limit=30&offset=0` | 高赞 Top 3 + 其余提问分页，含评论数 |
+| GET | `/api/community?limit=30&offset=0&courseId=` | 高赞 Top 3 + 其余提问分页，含评论数 |
 | GET | `/api/questions/:id/comments` | 学生读取评论区（教师评论置顶） |
 | POST | `/api/questions/:id/comments` | 学生发表评论 |
 | POST | `/api/comments/:id/like` | 学生给评论点赞/取消 |
@@ -396,16 +411,20 @@ Content-Type: application/json
 | PATCH | `/api/auth/profile` | 修改教师名称/展示 ID/邮箱 |
 | POST | `/api/auth/password` | 修改密码并轮换会话 |
 | POST | `/api/auth/logout` | 注销会话 |
-| GET | `/api/resources?category=` | 学生浏览教学资源 |
+| GET | `/api/resources?category=&courseId=` | 学生浏览教学资源 |
 | GET | `/api/resources/:id/file` | 学生下载/打开资源文件（需 `X-Client-Id`） |
 | POST | `/api/admin/login` | 旧教师口令登录（兼容） |
-| GET | `/api/admin/questions` | 教师端全量列表与统计 |
+| GET | `/api/admin/courses` | 教师端课程列表（含统计） |
+| POST | `/api/admin/courses` | 创建课程 |
+| PATCH | `/api/admin/courses/:id` | 修改课程 |
+| DELETE | `/api/admin/courses/:id` | 归档课程 |
+| GET | `/api/admin/questions?courseId=` | 教师端列表与统计；`all` 表示全部课程 |
 | GET | `/api/admin/questions/:id/comments` | 教师读取评论 |
 | POST | `/api/admin/questions/:id/comments` | 教师发表评论 |
 | POST | `/api/admin/comments/:id/like` | 教师给评论点赞 |
-| GET | `/api/admin/resources` | 教师端资源列表 |
-| POST | `/api/admin/resources` | 上传资源（multipart，字段 `file` + 元数据） |
-| PATCH | `/api/admin/resources/:id` | 修改资源，可替换文件 |
+| GET | `/api/admin/resources?courseId=` | 教师端资源列表；`all` 表示全部课程 |
+| POST | `/api/admin/resources` | 上传资源（multipart，字段 `file` + 元数据 + `courseId`） |
+| PATCH | `/api/admin/resources/:id` | 修改资源，可替换文件/调整所属课程 |
 | DELETE | `/api/admin/resources/:id` | 删除资源 |
 | GET | `/api/admin/resources/:id/file` | 教师下载资源 |
 | GET | `/api/admin/backup` | 备份配置、最近一次备份与运行状态 |
@@ -418,6 +437,7 @@ Content-Type: application/json
 ```json
 {
   "question": "请解释为什么 lim(x→0) sin x / x = 1。",
+  "courseId": "c_default",
   "context": [
     { "role": "user", "content": "上一轮问题" },
     { "role": "assistant", "content": "上一轮回答" }
@@ -462,17 +482,21 @@ Content-Type: application/json
 
 `npm run db:migrate` 会自动创建：
 
+- `courses`：课程名称、教师姓名、课程编号、学期、颜色、启用/归档状态
 - `students`：匿名身份哈希、匿名称号、创建/活跃时间、可选小程序 openid（仅用于服务号推送）
-- `questions`：问题、DeepSeek 回答、模型、token 用量、耗时
+- `questions`：课程 ID、问题、DeepSeek 回答、模型、token 用量、耗时
 - `likes`：问题 + 学生的联合主键，数据库层保证每人每题只能赞一次
+- `course_notices`：教师资源发布/更新通知（全体学生可见）
+- `notice_reads`：课程通知已读回执
+- `student_events`：评论、教师回复、问题点赞、评论点赞的定向消息
 - `teachers`：教师邮箱、scrypt 密码哈希、姓名、对外展示 ID
 - `teacher_sessions`：教师登录会话的 token 哈希、过期时间
 - `question_comments`：问题评论，区分教师/学生、作者快照与创建时间
 - `comment_likes`：评论 + 评论者联合主键，学生和教师都可点赞
 - `push_notifications`：教师评论服务号推送状态与错误信息
-- `resources`：标题、分类、简介、文件名、格式、大小、COS Key、更新时间
+- `resources`：课程 ID、标题、分类、简介、文件名、格式、大小、COS Key、更新时间
 - `backup_runs`：备份状态、COS 对象 Key、文件大小、错误信息
-- `schema_migrations`：表结构版本（当前 v4）
+- `schema_migrations`：表结构版本（当前 v5）
 
 删除问题使用 `questions.deleted_at` 软删除；已有查询都会过滤 `deleted_at IS NULL`。
 
@@ -494,11 +518,11 @@ Content-Type: application/json
 - 自动：`BACKUP_ENABLED=true` 后按 `BACKUP_CRON` 执行，上传 COS；可选本地副本。
 - 手动：教师后台云朵按钮，或 `npm run backup`。
 - 恢复：`npm run restore -- <备份文件> --yes`，只允许导入**空数据库**。
-- 备份包含教师账号、学生、问题（含答疑图片元数据）、点赞、评论、评论点赞和资源元数据；资源/答疑图片的二进制文件保存在 COS，建议开启版本控制或单独做 COS 备份。
+- 备份包含课程、教师账号、学生、问题（含答疑图片元数据）、点赞、评论、评论点赞、资源元数据和课程通知/学生消息；资源/答疑图片的二进制文件保存在 COS，建议开启版本控制或单独做 COS 备份。
 - 教师密码在备份中是 scrypt 哈希，但备份文件仍应按敏感数据管理。
 - 腾讯云数据库自身自动备份仍然要开启，COS 快照是第二层保护。
 
-备份格式是压缩 JSON，包含 `teachers / students / questions / likes / comments / commentLikes / resources`、`schemaVersion` 和条数统计；上传 COS 时在对象元数据中记录 SHA-256。恢复脚本会保留原问题 ID、学生 ID、点赞关系和原始时间，资源文件与答疑图片本体仍从 COS 按元数据 Key 读取。
+备份格式是压缩 JSON，包含 `courses / teachers / students / questions / likes / comments / commentLikes / resources / courseNotices / noticeReads / studentEvents`、`schemaVersion` 和条数统计；上传 COS 时在对象元数据中记录 SHA-256。恢复脚本会保留原问题 ID、学生 ID、点赞关系和原始时间，资源文件与答疑图片本体仍从 COS 按元数据 Key 读取。
 
 ### 本地 JSON 模式
 
@@ -521,9 +545,9 @@ cd server
 npm test
 ```
 
-后端共 **37 项**测试。覆盖：健康检查、身份校验、提问落库、历史、社区排序、点赞、图片上传与视觉模型参数、图片读取、教师口令/邮箱注册登录、资料与密码修改、会话失效、教师/学生评论、评论点赞、教师评论置顶、历史教师评论、评论计数、小程序 openid 绑定、服务号推送参数、Markdown/Word 导出、安全响应头、DeepSeek 请求与错误映射、COS/本地备份内容与上传参数、教学资源上传/修改/删除/学生下载/类型校验/权限。
+后端共 **38 项**测试。覆盖：健康检查、身份校验、课程创建/切换/归档、课程隔离、学生消息、提问落库、历史、社区排序、点赞、图片上传与视觉模型参数、图片读取、教师口令/邮箱注册登录、资料与密码修改、会话失效、教师/学生评论、评论点赞、教师评论置顶、历史教师评论、评论计数、小程序 openid 绑定、服务号推送参数、Markdown/Word 导出、安全响应头、DeepSeek 请求与错误映射、COS/本地备份内容与上传参数、教学资源上传/修改/删除/学生下载/类型校验/权限。
 
-MySQL 存储层已用真实 MySQL 8.4 实例联调：v1→v2→v3→v4 增量迁移、教师账号/会话、问题/点赞、答疑图片元数据、评论/评论点赞、资源元数据 CRUD、备份快照（含教师、评论和图片元数据）和空库恢复。教师端注册/登录、账号设置、评论发表、评论点赞和弹窗布局也做了 Playwright 桌面/移动端测试。
+MySQL 存储层已用真实 MySQL 8.4 实例联调：v1→v2→v3→v4→v5 增量迁移、课程、教师账号/会话、问题/点赞、答疑图片元数据、评论/评论点赞、资源元数据 CRUD、学生通知/互动消息、备份快照（含课程、教师、评论、通知和图片元数据）和空库恢复。教师端注册/登录、账号设置、课程选择/创建、资源课程选择、评论发表、评论点赞和弹窗布局也做了 Playwright 桌面/移动端测试。
 
 小程序 `transport: 'cloud'` 模式已单独做过请求路径、`X-WX-SERVICE`、`X-Client-Id`、JSON 响应、公网长问答、`downloadFile` 和 `arraybuffer` 文件下载 mock 测试；同学圈评论区还做了页面逻辑测试。由于本机没有 Docker，镜像构建与真实微信云托管部署需要你在控制台完成。
 
@@ -685,6 +709,6 @@ npm run db:migrate
 - 本机项目可以直接运行；迁移到服务器建议重新 `npm ci --omit=dev`。
 - 教师可以用邮箱注册/登录；注册码默认是本机 `server/.env` 的 `ADMIN_TOKEN`，不要写进公开仓库。旧教师口令仍可作为应急登录。
 - **ZIP 压缩包不包含 `.env`**，因为本机 `.env` 可能含真实 DeepSeek Key；服务器/云托管部署时按 `.env.example` 在控制台重新配置。
-- 本机默认 `DB_DRIVER=json`；上线前务必改成 `mysql` 并执行 `npm run db:migrate`（会自动升级到 v4）。
+- 本机默认 `DB_DRIVER=json`；上线前务必改成 `mysql` 并执行 `npm run db:migrate`（会自动升级到 v5）。
 - 微信云托管部署使用项目根目录 [Dockerfile](Dockerfile)，小程序 [config.js](miniprogram/config.js) 改为 `transport: 'cloud'`。
 - 微信小程序正式发布前，请确认 `project.config.json` 的 AppID 与云托管/服务号配置一致；云托管模式还需要把小程序关联到目标云开发环境。

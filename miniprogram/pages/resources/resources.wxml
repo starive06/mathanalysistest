@@ -21,6 +21,8 @@
     </view>
   </view>
 
+  <course-context course="{{activeCourse}}" />
+
   <scroll-view class="category-scroll" scroll-x enhanced show-scrollbar="{{false}}">
     <view class="category-row">
       <button
@@ -126,4 +128,5 @@
   </view>
 
   <view class="page-bottom-space"></view>
+  <workspace-tab-bar id="workspaceTabBar" selected="{{3}}" />
 </view>

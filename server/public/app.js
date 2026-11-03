@@ -51,6 +51,23 @@
     passwordError: document.getElementById('password-error'),
     passwordSave: document.getElementById('password-save'),
     profileLegacyNote: document.getElementById('profile-legacy-note'),
+    courseTrigger: document.getElementById('course-trigger'),
+    courseMenu: document.getElementById('course-menu'),
+    currentCourseName: document.getElementById('current-course-name'),
+    courseBackdrop: document.getElementById('course-backdrop'),
+    courseModal: document.getElementById('course-modal'),
+    courseModalClose: document.getElementById('course-modal-close'),
+    courseManageList: document.getElementById('course-manage-list'),
+    courseForm: document.getElementById('course-form'),
+    courseFormTitle: document.getElementById('course-form-title'),
+    courseName: document.getElementById('course-name'),
+    courseTeacher: document.getElementById('course-teacher'),
+    courseCode: document.getElementById('course-code'),
+    courseTerm: document.getElementById('course-term'),
+    courseColor: document.getElementById('course-color'),
+    courseError: document.getElementById('course-error'),
+    courseEditId: document.getElementById('course-edit-id'),
+    courseSave: document.getElementById('course-save'),
     logoutButton: document.getElementById('logout-button'),
     refreshButton: document.getElementById('refresh-button'),
     backupButton: document.getElementById('backup-button'),
@@ -126,6 +143,11 @@
     drawerComments: [],
     commentLoading: false,
     profileOpen: false,
+    courses: [],
+    activeCourseId: 'all',
+    courseMenuOpen: false,
+    courseModalOpen: false,
+    editingCourseId: '',
   };
 
   function formatNumber(value) {
@@ -251,6 +273,237 @@
     elements.profileLegacyNote.hidden = !legacy;
   }
 
+  function activeCourse() {
+    return state.courses.find((course) => course.id === state.activeCourseId) || null;
+  }
+
+  function activeCourseLabel() {
+    return activeCourse()?.name || '全部课程';
+  }
+
+  function renderCourseSelector() {
+    if (!elements.currentCourseName) return;
+    elements.currentCourseName.textContent = activeCourseLabel();
+    elements.courseMenu.replaceChildren();
+    const addItem = (id, label, meta) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = `course-menu-item${state.activeCourseId === id ? ' active' : ''}`;
+      const labelSpan = document.createElement('span');
+      labelSpan.textContent = label;
+      button.append(labelSpan);
+      if (meta) {
+        const metaSpan = document.createElement('small');
+        metaSpan.textContent = meta;
+        button.append(metaSpan);
+      }
+      button.addEventListener('click', () => selectCourse(id));
+      elements.courseMenu.append(button);
+    };
+    addItem('all', '全部课程', '汇总');
+    for (const course of state.courses.filter((item) => item.status !== 'archived')) {
+      addItem(course.id, course.name, course.courseCode);
+    }
+    const divider = document.createElement('div');
+    divider.className = 'course-menu-divider';
+    elements.courseMenu.append(divider);
+    const manage = document.createElement('button');
+    manage.type = 'button';
+    manage.className = 'course-menu-item course-menu-manage';
+    manage.textContent = '管理课程 / 新建课程';
+    manage.addEventListener('click', () => {
+      closeCourseMenu();
+      openCourseModal();
+    });
+    elements.courseMenu.append(manage);
+  }
+
+  async function loadCourses() {
+    try {
+      const data = await api('/api/admin/courses');
+      state.courses = Array.isArray(data?.courses) ? data.courses : [];
+      const saved = localStorage.getItem('mathTutorAdminCourse') || 'all';
+      const valid = state.courses.some(
+        (course) => course.id === saved && course.status !== 'archived',
+      );
+      state.activeCourseId = valid ? saved : 'all';
+      renderCourseSelector();
+    } catch (error) {
+      state.courses = [];
+      state.activeCourseId = 'all';
+      renderCourseSelector();
+      showToast(error.message, 'error');
+    }
+  }
+
+  function toggleCourseMenu() {
+    state.courseMenuOpen = !state.courseMenuOpen;
+    elements.courseMenu.hidden = !state.courseMenuOpen;
+    elements.courseTrigger.setAttribute('aria-expanded', String(state.courseMenuOpen));
+  }
+
+  function closeCourseMenu() {
+    state.courseMenuOpen = false;
+    elements.courseMenu.hidden = true;
+    elements.courseTrigger.setAttribute('aria-expanded', 'false');
+  }
+
+  function selectCourse(id) {
+    if (state.activeCourseId === id) {
+      closeCourseMenu();
+      return;
+    }
+    state.activeCourseId = id;
+    localStorage.setItem('mathTutorAdminCourse', id);
+    state.selected.clear();
+    closeCourseMenu();
+    renderCourseSelector();
+    void loadData();
+  }
+
+  function renderCourseManageList() {
+    elements.courseManageList.replaceChildren();
+    if (!state.courses.length) {
+      const empty = document.createElement('p');
+      empty.className = 'course-manage-empty';
+      empty.textContent = '还没有课程，先在下面创建一门。';
+      elements.courseManageList.append(empty);
+      return;
+    }
+    for (const course of state.courses) {
+      const row = document.createElement('div');
+      row.className = 'course-manage-row';
+      const copy = document.createElement('div');
+      copy.className = 'course-manage-copy';
+      const title = document.createElement('strong');
+      title.textContent = `${course.name}${course.status === 'archived' ? '（已归档）' : ''}`;
+      const meta = document.createElement('small');
+      meta.textContent = `${course.courseCode} · ${course.teacherName}`;
+      copy.append(title, meta);
+      const actions = document.createElement('div');
+      actions.className = 'course-manage-actions';
+      if (course.status !== 'archived') {
+        const edit = document.createElement('button');
+        edit.type = 'button';
+        edit.textContent = '编辑';
+        edit.addEventListener('click', () => fillCourseForm(course));
+        const archive = document.createElement('button');
+        archive.type = 'button';
+        archive.className = 'danger';
+        archive.textContent = '归档';
+        archive.addEventListener('click', () => void archiveCourse(course));
+        actions.append(edit, archive);
+      }
+      row.append(copy, actions);
+      elements.courseManageList.append(row);
+    }
+  }
+
+  function resetCourseForm() {
+    state.editingCourseId = '';
+    elements.courseEditId.value = '';
+    elements.courseFormTitle.textContent = '新建课程';
+    elements.courseSave.textContent = '创建课程';
+    elements.courseName.value = '';
+    elements.courseTeacher.value = state.teacher?.name || '';
+    elements.courseCode.value = '';
+    elements.courseTerm.value = '';
+    elements.courseColor.value = '0';
+    elements.courseError.textContent = '';
+  }
+
+  function fillCourseForm(course) {
+    state.editingCourseId = course.id;
+    elements.courseEditId.value = course.id;
+    elements.courseFormTitle.textContent = '编辑课程';
+    elements.courseSave.textContent = '保存修改';
+    elements.courseName.value = course.name || '';
+    elements.courseTeacher.value = course.teacherName || '';
+    elements.courseCode.value = course.courseCode || '';
+    elements.courseTerm.value = course.term || '';
+    elements.courseColor.value = String(course.colorIndex || 0);
+    elements.courseError.textContent = '';
+    elements.courseForm.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function openCourseModal() {
+    if (!state.token) return;
+    state.courseModalOpen = true;
+    renderCourseManageList();
+    resetCourseForm();
+    elements.courseBackdrop.hidden = false;
+    elements.courseBackdrop.classList.add('is-open');
+    elements.courseModal.classList.add('is-open');
+    elements.courseModal.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeCourseModal() {
+    state.courseModalOpen = false;
+    elements.courseBackdrop.classList.remove('is-open');
+    elements.courseBackdrop.hidden = true;
+    elements.courseModal.classList.remove('is-open');
+    elements.courseModal.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+  }
+
+  async function archiveCourse(course) {
+    if (!window.confirm(`确定归档「${course.name}」吗？历史数据会保留，但学生将看不到这门课。`)) {
+      return;
+    }
+    try {
+      await api(`/api/admin/courses/${encodeURIComponent(course.id)}`, {
+        method: 'DELETE',
+      });
+      await loadCourses();
+      if (state.activeCourseId !== 'all' && !activeCourse()) state.activeCourseId = 'all';
+      renderCourseManageList();
+      renderCourseSelector();
+      await loadData({ silent: true });
+      showToast('课程已归档');
+    } catch (error) {
+      showToast(error.message, 'error');
+    }
+  }
+
+  async function saveCourse(event) {
+    event.preventDefault();
+    const payload = {
+      name: elements.courseName.value.trim(),
+      teacherName: elements.courseTeacher.value.trim(),
+      courseCode: elements.courseCode.value.trim(),
+      term: elements.courseTerm.value.trim(),
+      colorIndex: Number(elements.courseColor.value),
+    };
+    elements.courseError.textContent = '';
+    if (!payload.name || !payload.teacherName || !payload.courseCode) {
+      elements.courseError.textContent = '请填写课程名称、教师姓名和课程编号。';
+      return;
+    }
+    const editing = Boolean(state.editingCourseId);
+    setButtonBusy(elements.courseSave, true, editing ? '保存中…' : '创建中…');
+    try {
+      const course = await api(
+        editing
+          ? `/api/admin/courses/${encodeURIComponent(state.editingCourseId)}`
+          : '/api/admin/courses',
+        { method: editing ? 'PATCH' : 'POST', body: payload },
+      );
+      await loadCourses();
+      state.activeCourseId = course.id;
+      localStorage.setItem('mathTutorAdminCourse', course.id);
+      renderCourseSelector();
+      renderCourseManageList();
+      resetCourseForm();
+      await loadData({ silent: true });
+      showToast(editing ? '课程已更新' : '课程已创建');
+    } catch (error) {
+      elements.courseError.textContent = error.message;
+    } finally {
+      setButtonBusy(elements.courseSave, false);
+    }
+  }
+
   async function completeLogin(data) {
     state.token = data.token;
     sessionStorage.setItem(TOKEN_KEY, data.token);
@@ -258,7 +511,9 @@
     showApp();
     state.questions = [];
     state.stats = null;
+    state.activeCourseId = 'all';
     render();
+    await loadCourses();
     await loadData();
     checkHealth();
     loadBackupStatus();
@@ -270,6 +525,7 @@
       updateTeacherUI(data.teacher);
       showApp();
       render();
+      await loadCourses();
       await loadData();
       checkHealth();
       loadBackupStatus();
@@ -326,6 +582,10 @@
     state.selected.clear();
     state.activeQuestionId = null;
     state.activeQuestion = null;
+    state.courses = [];
+    state.activeCourseId = 'all';
+    state.courseMenuOpen = false;
+    state.courseModalOpen = false;
     state.backupStatus = null;
     state.backupRunning = false;
     elements.backupButton.hidden = true;
@@ -341,6 +601,8 @@
     }
     closeDrawer();
     closeProfile();
+    closeCourseMenu();
+    closeCourseModal();
     showLogin(message);
   }
 
@@ -599,6 +861,12 @@
     const questionCell = document.createElement('td');
     const questionWrap = document.createElement('div');
     questionWrap.className = 'question-cell';
+    if (state.activeCourseId === 'all' && item.courseName) {
+      const courseTag = document.createElement('span');
+      courseTag.className = 'course-row-tag';
+      courseTag.textContent = item.courseName;
+      questionWrap.append(courseTag);
+    }
     const questionText = document.createElement('p');
     questionText.className = 'question-text';
     questionText.textContent = item.question;
@@ -686,11 +954,12 @@
     elements.statTodayNote.textContent =
       stats.todayQuestions > 0 ? '今天的课堂追问' : '今天还没有新提问';
     const updated = state.lastUpdated ? formatDisplayTime(state.lastUpdated) : '—';
+    const courseLabel = activeCourseLabel();
     elements.pageSubtitle.textContent = stats.totalQuestions
-      ? `共 ${formatNumber(stats.totalQuestions)} 条答疑记录，来自 ${formatNumber(
+      ? `${courseLabel} · 共 ${formatNumber(stats.totalQuestions)} 条答疑记录，来自 ${formatNumber(
           stats.totalStudents,
         )} 位匿名学生 · 最近更新 ${updated}`
-      : '尚无答疑记录，学生提交问题后会自动汇总到这里。';
+      : `${courseLabel} · 尚无答疑记录，学生提交问题后会自动汇总到这里。`;
   }
 
   function render() {
@@ -709,7 +978,9 @@
       elements.questionTable.hidden = true;
     }
     try {
-      const data = await api('/api/admin/questions');
+      const data = await api(
+        `/api/admin/questions?courseId=${encodeURIComponent(state.activeCourseId || 'all')}`,
+      );
       state.questions = Array.isArray(data?.questions) ? data.questions : [];
       state.stats = data?.stats || null;
       state.lastUpdated = new Date();
@@ -1020,7 +1291,7 @@
           'Content-Type': 'application/json',
           Authorization: `Bearer ${state.token}`,
         },
-        body: JSON.stringify({ ids }),
+        body: JSON.stringify({ ids, courseId: state.activeCourseId || 'all' }),
       });
       if (response.status === 401) {
         logout('登录状态已失效，请重新登录。');
@@ -1199,6 +1470,18 @@
       logout();
       showToast('已退出教师后台');
     });
+    elements.courseTrigger.addEventListener('click', (event) => {
+      event.stopPropagation();
+      toggleCourseMenu();
+    });
+    elements.courseModalClose.addEventListener('click', closeCourseModal);
+    elements.courseBackdrop.addEventListener('click', closeCourseModal);
+    elements.courseForm.addEventListener('submit', (event) => void saveCourse(event));
+    document.addEventListener('click', (event) => {
+      if (!state.courseMenuOpen) return;
+      if (!event.target.closest('.course-selector')) closeCourseMenu();
+    });
+
     elements.profileButton.addEventListener('click', openProfile);
     elements.profileClose.addEventListener('click', closeProfile);
     elements.profileBackdrop.addEventListener('click', closeProfile);
@@ -1262,7 +1545,9 @@
         elements.searchInput.focus();
       }
       if (event.key === 'Escape') {
-        if (elements.profileModal.classList.contains('is-open')) closeProfile();
+        if (elements.courseModal.classList.contains('is-open')) closeCourseModal();
+        else if (state.courseMenuOpen) closeCourseMenu();
+        else if (elements.profileModal.classList.contains('is-open')) closeProfile();
         else if (elements.drawer.classList.contains('is-open')) closeDrawer();
         else if (document.activeElement === elements.searchInput) elements.searchInput.blur();
       }

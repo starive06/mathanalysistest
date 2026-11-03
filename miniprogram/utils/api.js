@@ -135,12 +135,13 @@ function request(path, options) {
   return httpRequest(path, opts);
 }
 
-function askQuestion(question, context) {
+function askQuestion(question, context, courseId) {
   return request('/api/questions', {
     method: 'POST',
     data: {
       question,
       context: context || [],
+      courseId: courseId || '',
     },
     timeout: Math.min(config.requestTimeout, 60000),
     // callContainer 最长 15 秒，问答必须走公网域名。
@@ -148,7 +149,7 @@ function askQuestion(question, context) {
   });
 }
 
-function askQuestionWithImage(question, context, filePath) {
+function askQuestionWithImage(question, context, filePath, courseId) {
   const baseUrl =
     config.transport === 'cloud'
       ? normalizeBaseUrl(config.cloudPublicBaseUrl)
@@ -170,6 +171,7 @@ function askQuestionWithImage(question, context, filePath) {
       formData: {
         question,
         context: JSON.stringify(context || []),
+        courseId: courseId || '',
       },
       timeout: Math.min(config.requestTimeout, 60000),
       header: {
@@ -212,11 +214,11 @@ function resolveAssetUrl(path) {
   return base ? `${base}${value}` : value;
 }
 
-function getMyQuestions(limit, offset) {
+function getMyQuestions(limit, offset, courseId) {
   return request(
     `/api/questions/mine?limit=${encodeURIComponent(limit || 30)}&offset=${encodeURIComponent(
       offset || 0,
-    )}`,
+    )}&courseId=${encodeURIComponent(courseId || '')}`,
   );
 }
 
@@ -230,11 +232,11 @@ function toggleLike(id) {
   });
 }
 
-function getCommunity(limit, offset) {
+function getCommunity(limit, offset, courseId) {
   return request(
     `/api/community?limit=${encodeURIComponent(limit || 30)}&offset=${encodeURIComponent(
       offset || 0,
-    )}`,
+    )}&courseId=${encodeURIComponent(courseId || '')}`,
   );
 }
 
@@ -269,9 +271,41 @@ function toggleCommentLike(commentId) {
   });
 }
 
-function getResources(category) {
-  const suffix = category ? `?category=${encodeURIComponent(category)}` : '';
+function getResources(category, courseId) {
+  const params = [];
+  if (category) params.push(`category=${encodeURIComponent(category)}`);
+  if (courseId) params.push(`courseId=${encodeURIComponent(courseId)}`);
+  const suffix = params.length ? `?${params.join('&')}` : '';
   return request(`/api/resources${suffix}`);
+}
+
+function getCourses() {
+  return request('/api/courses');
+}
+
+function getMessageSummary() {
+  return request('/api/messages/summary', { timeout: 15000 });
+}
+
+function getMessages(box, limit, offset) {
+  return request(
+    `/api/messages?box=${encodeURIComponent(box || 'notice')}&limit=${encodeURIComponent(
+      limit || 30,
+    )}&offset=${encodeURIComponent(offset || 0)}`,
+    { timeout: 15000 },
+  );
+}
+
+function markMessagesRead(ids, options) {
+  return request('/api/messages/read', {
+    method: 'POST',
+    data: {
+      ids: ids || [],
+      box: options?.box || '',
+      all: Boolean(options?.all),
+    },
+    timeout: 15000,
+  });
 }
 
 function downloadFileFrom(baseUrl, filePath) {
@@ -366,4 +400,8 @@ module.exports = {
   toggleCommentLike,
   getResources,
   downloadResourceFile,
+  getCourses,
+  getMessageSummary,
+  getMessages,
+  markMessagesRead,
 };

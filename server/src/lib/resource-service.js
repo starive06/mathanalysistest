@@ -107,6 +107,8 @@ function validateFile(file, maxSizeBytes) {
 function publicResource(resource) {
   return {
     id: resource.id,
+    courseId: resource.courseId || 'c_default',
+    courseName: resource.courseName || '',
     title: resource.title,
     category: resource.category,
     description: resource.description || '',
@@ -132,18 +134,26 @@ export class ResourceService {
     this.maxSizeBytes = maxSizeMb * 1024 * 1024;
   }
 
-  async listPublic(category = '') {
+  async listPublic(category = '', courseId = '') {
     const normalizedCategory = category ? validateCategory(category) : '';
-    const resources = await this.store.listResources({ category: normalizedCategory });
+    const resources = await this.store.listResources({
+      category: normalizedCategory,
+      courseId,
+    });
     return resources.map(publicResource);
   }
 
-  async listAdmin() {
-    const resources = await this.store.listResources({});
+  async listAdmin(courseId = '') {
+    const resources = await this.store.listResources({ courseId });
     return resources.map(publicResource);
   }
 
-  async create({ title, category, description, file }) {
+  async getAdmin(id) {
+    const resource = await this.store.getResource(id);
+    return resource ? publicResource(resource) : null;
+  }
+
+  async create({ courseId = 'c_default', title, category, description, file }) {
     const normalizedTitle = normalizeText(title, 200, '标题');
     if (!normalizedTitle) throw badRequest('RESOURCE_TITLE_REQUIRED', '请填写资源标题');
     const normalizedCategory = validateCategory(category);
@@ -157,6 +167,7 @@ export class ResourceService {
     try {
       const created = await this.store.createResource({
         id,
+        courseId,
         title: normalizedTitle,
         category: normalizedCategory,
         description: normalizedDescription,
@@ -175,11 +186,13 @@ export class ResourceService {
     }
   }
 
-  async update(id, { title, category, description, file }) {
+  async update(id, { courseId, title, category, description, file }) {
     const existing = await this.store.getResource(id);
     if (!existing) {
       throw new AppError(404, 'RESOURCE_NOT_FOUND', '教学资源不存在或已被删除');
     }
+    const normalizedCourseId =
+      courseId === undefined ? existing.courseId || 'c_default' : courseId;
     const normalizedTitle =
       title === undefined ? existing.title : normalizeText(title, 200, '标题');
     if (!normalizedTitle) throw badRequest('RESOURCE_TITLE_REQUIRED', '请填写资源标题');
@@ -218,6 +231,7 @@ export class ResourceService {
 
     try {
       const updated = await this.store.updateResource(id, {
+        courseId: normalizedCourseId,
         title: normalizedTitle,
         category: normalizedCategory,
         description: normalizedDescription,

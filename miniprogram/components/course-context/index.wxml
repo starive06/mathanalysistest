@@ -1,0 +1,15 @@
+<view class="course-context">
+  <view class="course-context-main" bindtap="goCourses" hover-class="course-context-hover">
+    <view class="course-context-mark">Σ</view>
+    <view class="course-context-copy">
+      <text class="course-context-label">当前课程</text>
+      <text class="course-context-name">{{course.name || '选择课程'}}</text>
+    </view>
+    <text class="course-context-action">切换</text>
+  </view>
+  <view class="course-context-message" bindtap="goMessages" hover-class="course-context-hover">
+    <view class="message-dot" wx:if="{{unread > 0}}"></view>
+    <text>消息</text>
+    <text class="message-count" wx:if="{{unread > 0}}">{{unread > 99 ? '99+' : unread}}</text>
+  </view>
+</view>

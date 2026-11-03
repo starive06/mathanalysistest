@@ -1,16 +1,19 @@
 const config = require('./config');
 const api = require('./utils/api');
 const { getClientId } = require('./utils/client');
+const { getActiveCourse } = require('./utils/course');
 
 App({
   globalData: {
     pendingQuestionId: null,
     clientId: '',
     transport: config.transport,
+    activeCourse: null,
   },
 
   onLaunch() {
     this.globalData.clientId = getClientId();
+    this.globalData.activeCourse = getActiveCourse();
     if (config.transport === 'cloud') {
       if (!wx.cloud || typeof wx.cloud.init !== 'function') {
         console.error('当前基础库不支持 wx.cloud，无法使用微信云托管调用模式。');

@@ -17,6 +17,10 @@
     app: document.getElementById('app'),
     logoutButton: document.getElementById('logout-button'),
     uploadButton: document.getElementById('upload-button'),
+    courseTrigger: document.getElementById('course-trigger'),
+    courseMenu: document.getElementById('course-menu'),
+    currentCourseName: document.getElementById('current-course-name'),
+    courseSelect: document.getElementById('resource-course'),
     pageSubtitle: document.getElementById('page-subtitle'),
     summaryTotal: document.getElementById('summary-total'),
     summaryCategories: document.getElementById('summary-categories'),
@@ -64,6 +68,9 @@
     submitting: false,
     maxSizeMb: 30,
     toastTimer: null,
+    courses: [],
+    activeCourseId: 'all',
+    courseMenuOpen: false,
   };
 
   function pad2(value) {
@@ -236,6 +243,9 @@
       resource.description || resource.fileName || '暂无简介',
     );
     copy.append(title, description);
+    if (state.activeCourseId === 'all' && resource.courseName) {
+      copy.append(createElement('span', 'course-row-tag', resource.courseName));
+    }
     main.append(badge, copy);
     mainCell.append(main);
 
@@ -299,12 +309,89 @@
     renderSummary();
   }
 
+  async function loadCourses() {
+    try {
+      const data = await api('/api/admin/courses');
+      state.courses = Array.isArray(data.courses) ? data.courses : [];
+      const saved = localStorage.getItem('mathTutorAdminCourse') || 'all';
+      state.activeCourseId = state.courses.some(
+        (course) => course.id === saved && course.status !== 'archived',
+      )
+        ? saved
+        : 'all';
+      renderCourseSelector();
+    } catch (error) {
+      state.courses = [];
+      state.activeCourseId = 'all';
+      renderCourseSelector();
+      showToast(error.message, 'error');
+    }
+  }
+
+  function renderCourseSelector() {
+    if (!elements.currentCourseName) return;
+    const active = state.courses.find((course) => course.id === state.activeCourseId);
+    elements.currentCourseName.textContent = active?.name || '全部课程';
+    elements.courseMenu.replaceChildren();
+    const add = (id, label, meta, manage = false) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = `course-menu-item${state.activeCourseId === id ? ' active' : ''}${manage ? ' course-menu-manage' : ''}`;
+      const text = document.createElement('span');
+      text.textContent = label;
+      button.append(text);
+      if (meta) {
+        const small = document.createElement('small');
+        small.textContent = meta;
+        button.append(small);
+      }
+      button.addEventListener('click', () => {
+        if (manage) {
+          window.location.href = '/admin';
+          return;
+        }
+        selectCourse(id);
+      });
+      elements.courseMenu.append(button);
+    };
+    add('all', '全部课程', '汇总');
+    for (const course of state.courses.filter((item) => item.status !== 'archived')) {
+      add(course.id, course.name, course.courseCode);
+    }
+    const divider = document.createElement('div');
+    divider.className = 'course-menu-divider';
+    elements.courseMenu.append(divider);
+    add('manage', '课程管理（教师后台）', '', true);
+  }
+
+  function toggleCourseMenu() {
+    state.courseMenuOpen = !state.courseMenuOpen;
+    elements.courseMenu.hidden = !state.courseMenuOpen;
+    elements.courseTrigger.setAttribute('aria-expanded', String(state.courseMenuOpen));
+  }
+
+  function closeCourseMenu() {
+    state.courseMenuOpen = false;
+    elements.courseMenu.hidden = true;
+    elements.courseTrigger.setAttribute('aria-expanded', 'false');
+  }
+
+  function selectCourse(id) {
+    state.activeCourseId = id;
+    localStorage.setItem('mathTutorAdminCourse', id);
+    closeCourseMenu();
+    renderCourseSelector();
+    void loadResources();
+  }
+
   async function loadResources() {
     state.loading = true;
     elements.loading.hidden = false;
     elements.empty.hidden = true;
     try {
-      const data = await api('/api/admin/resources');
+      const data = await api(
+        `/api/admin/resources?courseId=${encodeURIComponent(state.activeCourseId || 'all')}`,
+      );
       state.resources = Array.isArray(data.resources) ? data.resources : [];
       state.categories =
         Array.isArray(data.categories) && data.categories.length
@@ -314,9 +401,10 @@
       elements.maxFileSize.textContent = `${state.maxSizeMb} MB`;
       fillCategorySelect(elements.categoryFilter, true);
       fillCategorySelect(elements.category, false);
+      const courseLabel = state.courses.find((course) => course.id === state.activeCourseId)?.name || '全部课程';
       elements.pageSubtitle.textContent = state.resources.length
-        ? `共 ${state.resources.length} 份资源，学生在小程序「资源」中浏览。`
-        : '管理讲义、课件和练习资料，学生在小程序「资源」中浏览。';
+        ? `${courseLabel} · 共 ${state.resources.length} 份资源，学生在小程序「资源」中浏览。`
+        : `${courseLabel} · 管理讲义、课件和练习资料，学生在小程序「资源」中浏览。`;
       renderTable();
     } catch (error) {
       if (state.token) showToast(error.message, 'error');
@@ -391,6 +479,26 @@
     }, 220);
   }
 
+  function fillCourseSelect(selectedId) {
+    elements.courseSelect.replaceChildren();
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = '请选择课程';
+    elements.courseSelect.append(placeholder);
+    for (const course of state.courses.filter((item) => item.status !== 'archived')) {
+      const option = document.createElement('option');
+      option.value = course.id;
+      option.textContent = `${course.name} · ${course.courseCode}`;
+      elements.courseSelect.append(option);
+    }
+    const fallback =
+      selectedId ||
+      (state.activeCourseId !== 'all' ? state.activeCourseId : '') ||
+      state.courses.find((course) => course.status !== 'archived')?.id ||
+      '';
+    elements.courseSelect.value = fallback;
+  }
+
   function openCreateModal() {
     state.editingId = null;
     elements.modalTitle.textContent = '上传资源';
@@ -399,6 +507,7 @@
     elements.formError.textContent = '';
     resetFileInput();
     fillCategorySelect(elements.category, false);
+    fillCourseSelect('');
     elements.save.textContent = '保存资源';
     openModal();
   }
@@ -413,6 +522,7 @@
     elements.requiredMark.hidden = true;
     elements.formError.textContent = '';
     resetFileInput();
+    fillCourseSelect(resource.courseId);
     elements.currentFile.textContent = `当前文件：${resource.fileName}（不选择新文件则保留）`;
     elements.currentFile.hidden = false;
     elements.save.textContent = '保存修改';
@@ -446,9 +556,15 @@
     const title = elements.title.value.trim();
     const category = elements.category.value;
     const description = elements.description.value.trim();
+    const courseId = elements.courseSelect.value;
     const file = elements.file.files?.[0];
     elements.formError.textContent = '';
 
+    if (!courseId) {
+      elements.formError.textContent = '请选择所属课程';
+      elements.courseSelect.focus();
+      return;
+    }
     if (!title) {
       elements.formError.textContent = '请填写资源标题';
       elements.title.focus();
@@ -469,6 +585,7 @@
     data.append('title', title);
     data.append('category', category);
     data.append('description', description);
+    data.append('courseId', courseId);
     if (file) data.append('file', file);
 
     state.submitting = true;
@@ -537,6 +654,14 @@
   }
 
   function bindEvents() {
+    elements.courseTrigger.addEventListener('click', (event) => {
+      event.stopPropagation();
+      toggleCourseMenu();
+    });
+    document.addEventListener('click', (event) => {
+      if (!state.courseMenuOpen) return;
+      if (!event.target.closest('.course-selector')) closeCourseMenu();
+    });
     elements.uploadButton.addEventListener('click', openCreateModal);
     elements.emptyUpload.addEventListener('click', openCreateModal);
     elements.emptyReset.addEventListener('click', resetFilters);
@@ -577,6 +702,7 @@
       return;
     }
     showApp();
+    await loadCourses();
     await loadResources();
   }
 

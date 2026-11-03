@@ -1,5 +1,6 @@
 const api = require('../../utils/api');
 const { formatRelativeTime, getAnswerPreview } = require('../../utils/format');
+const { getActiveCourse, requireActiveCourse } = require('../../utils/course');
 
 function decorateQuestion(item) {
   const serverAlias = item.alias || '匿名同学';
@@ -54,6 +55,7 @@ Page({
     commentError: '',
     commentDraft: '',
     commentSubmitting: false,
+    activeCourse: null,
   },
 
   onLoad() {
@@ -62,6 +64,9 @@ Page({
   },
 
   onShow() {
+    const course = requireActiveCourse();
+    if (!course) return;
+    this.setData({ activeCourse: course });
     this.syncTabBar();
     this.loadCommunity({ silent: this.data.top.length + this.data.recent.length > 0 });
   },
@@ -85,7 +90,8 @@ Page({
       loadError: '',
     });
     try {
-      const data = await api.getCommunity(30, 0);
+      const courseId = this.data.activeCourse?.id || getActiveCourse()?.id || '';
+      const data = await api.getCommunity(30, 0, courseId);
       if (seq !== this._loadSeq) return;
       this.setData({
         top: (data.top || []).map(decorateQuestion),
@@ -114,7 +120,8 @@ Page({
     const seq = this._loadSeq;
     this.setData({ loadingMore: true });
     try {
-      const data = await api.getCommunity(30, this.data.recent.length);
+      const courseId = this.data.activeCourse?.id || getActiveCourse()?.id || '';
+      const data = await api.getCommunity(30, this.data.recent.length, courseId);
       if (seq !== this._loadSeq) return;
       const existingIds = new Set(this.data.recent.map((item) => item.id));
       const incoming = (data.recent || [])
@@ -135,10 +142,8 @@ Page({
   },
 
   syncTabBar() {
-    const tabBar = typeof this.getTabBar === 'function' && this.getTabBar();
-    if (!tabBar) return;
-    tabBar.setSelected(2);
-    tabBar.setHidden(false);
+    const tabBar = this.selectComponent('#workspaceTabBar');
+    if (tabBar) tabBar.setHidden(false);
   },
 
   previewQuestionImage(event) {
@@ -151,7 +156,7 @@ Page({
     const id = event.currentTarget.dataset.id;
     if (!id) return;
     getApp().globalData.pendingQuestionId = id;
-    wx.switchTab({ url: '/pages/chat/chat' });
+    wx.redirectTo({ url: '/pages/chat/chat' });
   },
 
   applyLikeState(id, liked, likeCount) {
@@ -321,6 +326,6 @@ Page({
   },
 
   goChat() {
-    wx.switchTab({ url: '/pages/chat/chat' });
+    wx.redirectTo({ url: '/pages/chat/chat' });
   },
 });

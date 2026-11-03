@@ -28,7 +28,7 @@
 .tab-item {
   position: relative;
   display: flex;
-  width: 25%;
+  width: 50%;
   flex-direction: column;
   align-items: center;
   justify-content: center;
@@ -77,4 +77,27 @@
 
 .tab-item.active .active-mark {
   background: #07c160;
+}
+
+.tab-icon-wrap {
+  position: relative;
+}
+
+.tab-badge {
+  position: absolute;
+  top: -9rpx;
+  right: -7rpx;
+  display: flex;
+  min-width: 25rpx;
+  height: 25rpx;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6rpx;
+  border: 2rpx solid #f7f7f7;
+  border-radius: 999rpx;
+  background: #eb6464;
+  color: #fff;
+  font-size: 14rpx;
+  font-weight: 600;
+  line-height: 1;
 }

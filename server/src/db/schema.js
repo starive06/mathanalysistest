@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 export const CREATE_MIGRATIONS_TABLE = `
   CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -185,6 +185,101 @@ export const MIGRATIONS = [
           ADD COLUMN image_token CHAR(48) CHARACTER SET ascii COLLATE ascii_bin NULL,
           ADD COLUMN image_size_bytes BIGINT UNSIGNED NULL,
           ADD UNIQUE KEY uq_questions_image_token (image_token)
+      `,
+    ],
+  },
+  {
+    version: 5,
+    statements: [
+      `
+        CREATE TABLE IF NOT EXISTS courses (
+          id VARCHAR(48) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+          name VARCHAR(120) NOT NULL,
+          teacher_name VARCHAR(80) NOT NULL,
+          course_code VARCHAR(64) NOT NULL,
+          term VARCHAR(32) NULL,
+          color_index TINYINT UNSIGNED NOT NULL DEFAULT 0,
+          sort_order INT NOT NULL DEFAULT 0,
+          status VARCHAR(16) NOT NULL DEFAULT 'active',
+          created_at DATETIME(3) NOT NULL,
+          updated_at DATETIME(3) NOT NULL,
+          deleted_at DATETIME(3) NULL,
+          PRIMARY KEY (id),
+          UNIQUE KEY uq_courses_code (course_code),
+          KEY idx_courses_status_sort (status, sort_order, created_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+      `,
+      `
+        INSERT INTO courses
+          (id, name, teacher_name, course_code, term, color_index, sort_order, status, created_at, updated_at, deleted_at)
+        VALUES
+          ('c_default', '数学分析', '课程教师', 'MATH-ANALYSIS', '2026秋', 0, 0, 'active', UTC_TIMESTAMP(3), UTC_TIMESTAMP(3), NULL)
+        ON DUPLICATE KEY UPDATE id = id
+      `,
+      `
+        ALTER TABLE questions
+          ADD COLUMN course_id VARCHAR(48) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'c_default',
+          ADD KEY idx_questions_course_created (course_id, created_at),
+          ADD CONSTRAINT fk_questions_course
+            FOREIGN KEY (course_id) REFERENCES courses (id)
+            ON UPDATE CASCADE ON DELETE RESTRICT
+      `,
+      `
+        ALTER TABLE resources
+          ADD COLUMN course_id VARCHAR(48) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'c_default',
+          ADD KEY idx_resources_course_updated (course_id, updated_at),
+          ADD CONSTRAINT fk_resources_course
+            FOREIGN KEY (course_id) REFERENCES courses (id)
+            ON UPDATE CASCADE ON DELETE RESTRICT
+      `,
+      `
+        CREATE TABLE IF NOT EXISTS course_notices (
+          id VARCHAR(48) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+          course_id VARCHAR(48) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+          type VARCHAR(24) NOT NULL,
+          title VARCHAR(200) NOT NULL,
+          body VARCHAR(1000) NULL,
+          resource_id VARCHAR(48) CHARACTER SET ascii COLLATE ascii_bin NULL,
+          created_at DATETIME(3) NOT NULL,
+          PRIMARY KEY (id),
+          KEY idx_course_notices_course_created (course_id, created_at),
+          CONSTRAINT fk_course_notices_course
+            FOREIGN KEY (course_id) REFERENCES courses (id)
+            ON UPDATE CASCADE ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+      `,
+      `
+        CREATE TABLE IF NOT EXISTS notice_reads (
+          notice_id VARCHAR(48) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+          owner_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+          read_at DATETIME(3) NOT NULL,
+          PRIMARY KEY (notice_id, owner_hash),
+          KEY idx_notice_reads_owner (owner_hash, read_at),
+          CONSTRAINT fk_notice_reads_notice
+            FOREIGN KEY (notice_id) REFERENCES course_notices (id)
+            ON UPDATE CASCADE ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+      `,
+      `
+        CREATE TABLE IF NOT EXISTS student_events (
+          id VARCHAR(48) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+          course_id VARCHAR(48) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+          recipient_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+          actor_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NULL,
+          type VARCHAR(24) NOT NULL,
+          title VARCHAR(200) NOT NULL,
+          body VARCHAR(1000) NULL,
+          question_id VARCHAR(48) CHARACTER SET ascii COLLATE ascii_bin NULL,
+          comment_id VARCHAR(48) CHARACTER SET ascii COLLATE ascii_bin NULL,
+          read_at DATETIME(3) NULL,
+          created_at DATETIME(3) NOT NULL,
+          PRIMARY KEY (id),
+          KEY idx_student_events_recipient (recipient_hash, created_at),
+          KEY idx_student_events_course_created (course_id, created_at),
+          CONSTRAINT fk_student_events_course
+            FOREIGN KEY (course_id) REFERENCES courses (id)
+            ON UPDATE CASCADE ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
       `,
     ],
   },

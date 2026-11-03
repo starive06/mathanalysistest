@@ -20,6 +20,8 @@
     </view>
   </view>
 
+  <course-context course="{{activeCourse}}" />
+
   <view class="section-head" wx:if="{{questions.length}}">
     <text class="section-title">全部记录</text>
     <text class="section-note">点击任意一条查看完整解答</text>
@@ -120,4 +122,5 @@
     </view>
     <text class="list-end" wx:elif="{{!hasMore}}">— 已经到底啦 —</text>
   </view>
+  <workspace-tab-bar id="workspaceTabBar" selected="{{1}}" />
 </view>

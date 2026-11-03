@@ -1,5 +1,6 @@
 const api = require('../../utils/api');
 const { formatRelativeTime } = require('../../utils/format');
+const { getActiveCourse, requireActiveCourse } = require('../../utils/course');
 
 function formatSize(bytes) {
   const value = Number(bytes || 0);
@@ -33,13 +34,18 @@ Page({
     loadError: '',
     openingId: '',
     skeletons: [1, 2, 3],
+    activeCourse: null,
   },
 
-  onLoad() {
+  onLoad(options) {
     this._loadSeq = 0;
+    this._pendingResourceId = options?.resourceId || '';
   },
 
   onShow() {
+    const course = requireActiveCourse();
+    if (!course) return;
+    this.setData({ activeCourse: course });
     this.syncTabBar();
     this.loadResources({ silent: this.data.resources.length > 0 });
   },
@@ -49,10 +55,8 @@ Page({
   },
 
   syncTabBar() {
-    const tabBar = typeof this.getTabBar === 'function' && this.getTabBar();
-    if (!tabBar) return;
-    tabBar.setSelected(3);
-    tabBar.setHidden(false);
+    const tabBar = this.selectComponent('#workspaceTabBar');
+    if (tabBar) tabBar.setHidden(false);
   },
 
   async loadResources(options) {
@@ -64,7 +68,8 @@ Page({
       loadError: '',
     });
     try {
-      const data = await api.getResources();
+      const courseId = this.data.activeCourse?.id || getActiveCourse()?.id || '';
+      const data = await api.getResources('', courseId);
       if (seq !== this._loadSeq) return;
       const resources = (data.resources || []).map(decorateResource);
       const categories = Array.isArray(data.categories) ? data.categories : [];
@@ -75,7 +80,16 @@ Page({
           loading: false,
           loadError: '',
         },
-        () => this.applyFilter(),
+        () => {
+          this.applyFilter();
+          const pendingId = this._pendingResourceId;
+          this._pendingResourceId = '';
+          if (pendingId) {
+            setTimeout(() => {
+              this.openResource({ currentTarget: { dataset: { id: pendingId } } });
+            }, 250);
+          }
+        },
       );
     } catch (error) {
       if (seq !== this._loadSeq) return;

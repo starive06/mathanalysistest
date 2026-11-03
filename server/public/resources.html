@@ -30,6 +30,19 @@
             <small>教学资源</small>
           </span>
         </a>
+        <div class="course-selector">
+          <button type="button" class="course-trigger" id="course-trigger" aria-haspopup="true" aria-expanded="false">
+            <span class="course-trigger-icon">Σ</span>
+            <span class="course-trigger-copy">
+              <small>当前课程</small>
+              <strong id="current-course-name">全部课程</strong>
+            </span>
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="m7 10 5 5 5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
+          <div class="course-menu" id="course-menu" hidden></div>
+        </div>
         <div class="topbar-actions">
           <a class="text-button back-link" href="/admin">返回答疑记录</a>
           <span class="topbar-divider"></span>
@@ -155,6 +168,12 @@
             </select>
           </label>
         </div>
+        <label class="form-field">
+          <span>所属课程 <b>*</b></span>
+          <select id="resource-course" name="courseId" required>
+            <option value="">请选择课程</option>
+          </select>
+        </label>
         <label class="form-field">
           <span>简介</span>
           <textarea id="resource-description" name="description" rows="3" maxlength="1000" placeholder="可选：简单说明内容或适用范围"></textarea>

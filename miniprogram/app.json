@@ -1,5 +1,7 @@
 {
   "pages": [
+    "pages/courses/courses",
+    "pages/messages/messages",
     "pages/chat/chat",
     "pages/history/history",
     "pages/community/community",
@@ -20,28 +22,16 @@
     "borderStyle": "black",
     "list": [
       {
-        "pagePath": "pages/chat/chat",
-        "text": "答疑",
-        "iconPath": "assets/tabbar/chat-normal.png",
-        "selectedIconPath": "assets/tabbar/chat-active.png"
+        "pagePath": "pages/courses/courses",
+        "text": "课堂",
+        "iconPath": "assets/tabbar/class-normal.png",
+        "selectedIconPath": "assets/tabbar/class-active.png"
       },
       {
-        "pagePath": "pages/history/history",
-        "text": "我的",
-        "iconPath": "assets/tabbar/history-normal.png",
-        "selectedIconPath": "assets/tabbar/history-active.png"
-      },
-      {
-        "pagePath": "pages/community/community",
-        "text": "同学圈",
-        "iconPath": "assets/tabbar/community-normal.png",
-        "selectedIconPath": "assets/tabbar/community-active.png"
-      },
-      {
-        "pagePath": "pages/resources/resources",
-        "text": "资源",
-        "iconPath": "assets/tabbar/resources-normal.png",
-        "selectedIconPath": "assets/tabbar/resources-active.png"
+        "pagePath": "pages/messages/messages",
+        "text": "消息",
+        "iconPath": "assets/tabbar/message-normal.png",
+        "selectedIconPath": "assets/tabbar/message-active.png"
       }
     ]
   },

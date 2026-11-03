@@ -10,6 +10,8 @@ import {
 } from './lib/exporter.js';
 import { SlidingWindowLimiter } from './lib/rate-limit.js';
 import { normalizeComment, teacherActorHash } from './lib/auth.js';
+import { CourseService } from './lib/course-service.js';
+import { MessageService } from './lib/message-service.js';
 import { TeacherService } from './lib/teacher-service.js';
 import {
   RESOURCE_CATEGORIES,
@@ -48,6 +50,11 @@ function parseAskContext(value) {
   } catch {
     return [];
   }
+}
+
+function courseIdFrom(value, fallback = 'c_default') {
+  const id = typeof value === 'string' ? value.trim() : '';
+  return id || fallback;
 }
 
 function parseLimit(value, fallback, max = 100) {
@@ -121,6 +128,8 @@ export function createApp({
 }) {
   const app = express();
   const teacherService = new TeacherService({ store, config, logger });
+  const courseService = new CourseService({ store });
+  const messageService = new MessageService({ store, logger });
   const askImageUpload = multer({
     storage: multer.memoryStorage(),
     limits: {
@@ -333,6 +342,40 @@ export function createApp({
     sendData(res, { bound: true });
   });
 
+  app.get('/api/courses', async (req, res) => {
+    sendData(res, { courses: await courseService.list() });
+  });
+
+  app.get('/api/courses/:id', async (req, res) => {
+    sendData(res, await courseService.requireActive(req.params.id));
+  });
+
+  app.get('/api/messages/summary', clientOnly, async (req, res) => {
+    sendData(res, await messageService.summary(req.ownerHash));
+  });
+
+  app.get('/api/messages', clientOnly, async (req, res) => {
+    const box = req.query.box === 'comment' ? 'comment' : 'notice';
+    const limit = parseLimit(req.query.limit, 30, 100);
+    const offset = Math.max(0, Number.parseInt(req.query.offset, 10) || 0);
+    sendData(res, await messageService.list(req.ownerHash, { box, limit, offset }));
+  });
+
+  app.post('/api/messages/read', clientOnly, async (req, res) => {
+    const ids = Array.isArray(req.body?.ids)
+      ? req.body.ids.filter((id) => typeof id === 'string').slice(0, 100)
+      : [];
+    const box = req.body?.box === 'notice' || req.body?.box === 'comment'
+      ? req.body.box
+      : '';
+    if (req.body?.all) {
+      sendData(res, { summary: await messageService.markAllRead(req.ownerHash, box) });
+      return;
+    }
+    const marked = await messageService.markRead(req.ownerHash, ids);
+    sendData(res, { marked, summary: await messageService.summary(req.ownerHash) });
+  });
+
   app.post('/api/questions', clientOnly, askImageUpload, async (req, res) => {
     const limit = askLimiter.check(req.ownerHash);
     if (!limit.allowed) {
@@ -351,6 +394,8 @@ export function createApp({
       rawQuestion = '请分析这张图片中的数学问题。';
     }
     const question = normalizeQuestion(rawQuestion, config.maxQuestionLength);
+    const courseId = courseIdFrom(req.body?.courseId);
+    await courseService.requireActive(courseId);
     const context = parseAskContext(req.body?.context);
     let imageInput = null;
     if (hasImage) {
@@ -377,6 +422,7 @@ export function createApp({
     try {
       record = await store.addQuestion({
         ownerHash: req.ownerHash,
+        courseId,
         question,
         answer: result.answer,
         model: result.model,
@@ -412,7 +458,9 @@ export function createApp({
   app.get('/api/questions/mine', clientOnly, async (req, res) => {
     const limit = parseLimit(req.query.limit, 30, 100);
     const offset = Math.max(0, Number.parseInt(req.query.offset, 10) || 0);
-    const result = await store.listForClient(req.ownerHash, { limit, offset });
+    const courseId = courseIdFrom(req.query.courseId);
+    await courseService.requireActive(courseId);
+    const result = await store.listForClient(req.ownerHash, { limit, offset, courseId });
     const teacherComments = await store.getTeacherCommentsForQuestions(
       result.items.map((item) => item.id),
       { viewerType: 'student', actorHash: req.ownerHash },
@@ -461,8 +509,8 @@ export function createApp({
       );
     }
     const content = normalizeComment(req.body?.content);
-    const questionOwner = await store.getQuestionOwnerHash(req.params.id);
-    if (!questionOwner) {
+    const questionMeta = await store.getQuestionMeta(req.params.id);
+    if (!questionMeta) {
       throw new AppError(404, 'QUESTION_NOT_FOUND', '这条提问不存在或已被删除。');
     }
     const comment = await store.createComment({
@@ -474,6 +522,17 @@ export function createApp({
       authorPublicId: '',
       content,
     });
+    const actorName = store.aliasFor(req.ownerHash);
+    void messageService
+      .createCommentEvent({
+        questionMeta,
+        commentId: comment.id,
+        actorHash: req.ownerHash,
+        actorName,
+        content,
+        teacher: false,
+      })
+      .catch((error) => logger.warn(`[message] ${error.message}`));
     sendData(res, comment, 201);
   });
 
@@ -495,6 +554,16 @@ export function createApp({
     if (!result) {
       throw new AppError(404, 'COMMENT_NOT_FOUND', '这条评论不存在或已被删除。');
     }
+    if (result.liked) {
+      const commentMeta = await store.getCommentMeta(req.params.id);
+      void messageService
+        .createCommentLikeEvent({
+          commentMeta,
+          actorHash: req.ownerHash,
+          actorName: store.aliasFor(req.ownerHash),
+        })
+        .catch((error) => logger.warn(`[message] ${error.message}`));
+    }
     sendData(res, result);
   });
 
@@ -513,19 +582,36 @@ export function createApp({
     if (!result) {
       throw new AppError(404, 'QUESTION_NOT_FOUND', '这条提问不存在或已被删除。');
     }
+    if (result.liked) {
+      const questionMeta = await store.getQuestionMeta(req.params.id);
+      void messageService
+        .createQuestionLikeEvent({
+          questionMeta,
+          actorHash: req.ownerHash,
+          actorName: store.aliasFor(req.ownerHash),
+        })
+        .catch((error) => logger.warn(`[message] ${error.message}`));
+    }
     sendData(res, result);
   });
 
   app.get('/api/community', clientOnly, async (req, res) => {
     const limit = parseLimit(req.query.limit, 30, 100);
     const offset = Math.max(0, Number.parseInt(req.query.offset, 10) || 0);
-    sendData(res, await store.getCommunity(req.ownerHash, { limit, offset }));
+    const courseId = courseIdFrom(req.query.courseId);
+    await courseService.requireActive(courseId);
+    sendData(
+      res,
+      await store.getCommunity(req.ownerHash, { limit, offset, courseId }),
+    );
   });
 
   app.get('/api/resources', clientOnly, async (req, res) => {
     const category = typeof req.query.category === 'string' ? req.query.category : '';
+    const courseId = courseIdFrom(req.query.courseId);
+    await courseService.requireActive(courseId);
     sendData(res, {
-      resources: await ensureResourceService().listPublic(category),
+      resources: await ensureResourceService().listPublic(category, courseId),
       categories: RESOURCE_CATEGORIES,
     });
   });
@@ -597,10 +683,37 @@ export function createApp({
     sendData(res, await teacherService.legacyLogin(req.body?.token));
   });
 
+  app.get('/api/admin/courses', adminOnly, async (req, res) => {
+    sendData(res, { courses: await courseService.list({ includeArchived: true }) });
+  });
+
+  app.post('/api/admin/courses', adminOnly, async (req, res) => {
+    const course = await courseService.create({
+      name: req.body?.name,
+      teacherName: req.body?.teacherName || req.teacher.name,
+      courseCode: req.body?.courseCode,
+      term: req.body?.term,
+      colorIndex: req.body?.colorIndex,
+      sortOrder: req.body?.sortOrder,
+    });
+    sendData(res, course, 201);
+  });
+
+  app.patch('/api/admin/courses/:id', adminOnly, async (req, res) => {
+    sendData(res, await courseService.update(req.params.id, req.body || {}));
+  });
+
+  app.delete('/api/admin/courses/:id', adminOnly, async (req, res) => {
+    sendData(res, await courseService.archive(req.params.id));
+  });
+
   app.get('/api/admin/questions', adminOnly, async (req, res) => {
+    const requestedCourseId = courseIdFrom(req.query.courseId);
+    const courseId = req.query.courseId === 'all' ? '' : requestedCourseId;
+    if (courseId) await courseService.requireActive(courseId);
     const [questions, stats] = await Promise.all([
-      store.getAdminQuestions(),
-      store.stats(),
+      store.getAdminQuestions({ courseId }),
+      store.stats({ courseId }),
     ]);
     sendData(res, {
       questions,
@@ -652,7 +765,20 @@ export function createApp({
       authorPublicId: req.teacher.publicId,
       content,
     });
-    const studentOwnerHash = await store.getQuestionOwnerHash(req.params.id);
+    const questionMeta = await store.getQuestionMeta(req.params.id);
+    const studentOwnerHash = questionMeta?.ownerHash || '';
+    if (questionMeta) {
+      void messageService
+        .createCommentEvent({
+          questionMeta,
+          commentId: comment.id,
+          actorHash: teacherActorHash(req.teacher),
+          actorName: req.teacher.name,
+          content,
+          teacher: true,
+        })
+        .catch((error) => logger.warn(`[message] ${error.message}`));
+    }
     if (studentOwnerHash && pushService) {
       void pushService
         .notifyTeacherComment({ question, comment, studentOwnerHash })
@@ -687,12 +813,23 @@ export function createApp({
     if (!result) {
       throw new AppError(404, 'COMMENT_NOT_FOUND', '这条评论不存在或已被删除。');
     }
+    if (result.liked) {
+      const commentMeta = await store.getCommentMeta(req.params.id);
+      void messageService
+        .createCommentLikeEvent({
+          commentMeta,
+          actorHash: teacherActorHash(req.teacher),
+          actorName: req.teacher.name,
+        })
+        .catch((error) => logger.warn(`[message] ${error.message}`));
+    }
     sendData(res, result);
   });
 
   app.get('/api/admin/resources', adminOnly, async (req, res) => {
+    const courseId = req.query.courseId === 'all' ? '' : courseIdFrom(req.query.courseId);
     sendData(res, {
-      resources: await ensureResourceService().listAdmin(),
+      resources: await ensureResourceService().listAdmin(courseId),
       categories: RESOURCE_CATEGORIES,
       maxSizeMb: config.resourceMaxSizeMb || MAX_RESOURCE_SIZE_MB,
     });
@@ -703,12 +840,23 @@ export function createApp({
     adminOnly,
     resourceUpload,
     async (req, res) => {
+      const courseId = courseIdFrom(req.body?.courseId);
+      const course = await courseService.requireActive(courseId);
       const resource = await ensureResourceService().create({
+        courseId,
         title: req.body?.title,
         category: req.body?.category,
         description: req.body?.description,
         file: req.file,
       });
+      void messageService
+        .createResourceNotice({
+          courseId,
+          resource,
+          actorName: req.teacher.name || course.teacherName,
+          action: 'published',
+        })
+        .catch((error) => logger.warn(`[message] ${error.message}`));
       sendData(res, resource, 201);
     },
   );
@@ -718,12 +866,29 @@ export function createApp({
     adminOnly,
     resourceUpload,
     async (req, res) => {
+      const existing = await ensureResourceService().getAdmin(req.params.id);
+      const courseId =
+        req.body?.courseId === undefined
+          ? existing?.courseId || 'c_default'
+          : courseIdFrom(req.body?.courseId);
+      await courseService.requireActive(courseId);
       const resource = await ensureResourceService().update(req.params.id, {
+        courseId,
         title: req.body?.title,
         category: req.body?.category,
         description: req.body?.description,
         file: req.file,
       });
+      if (req.file) {
+        void messageService
+          .createResourceNotice({
+            courseId,
+            resource,
+            actorName: req.teacher.name || '老师',
+            action: 'updated',
+          })
+          .catch((error) => logger.warn(`[message] ${error.message}`));
+      }
       sendData(res, resource);
     },
   );
@@ -785,7 +950,10 @@ export function createApp({
 
   async function exportQuestions(req, res, format) {
     const ids = parseExportIds(req);
-    const questions = await store.getQuestionsForExport(ids);
+    const rawCourseId = req.body?.courseId ?? req.query.courseId;
+    const courseId = rawCourseId === 'all' ? '' : courseIdFrom(rawCourseId);
+    if (courseId) await courseService.requireActive(courseId);
+    const questions = await store.getQuestionsForExport(ids, { courseId });
     const generatedAt = new Date();
     const filename = exportFileName(format, generatedAt);
 
@@ -883,6 +1051,10 @@ export function createApp({
     } else if (error?.code === 'TEACHER_ACCOUNT_EXISTS') {
       status = 409;
       code = 'TEACHER_ACCOUNT_EXISTS';
+      message = error.message;
+    } else if (error?.code === 'COURSE_CODE_EXISTS') {
+      status = 409;
+      code = 'COURSE_CODE_EXISTS';
       message = error.message;
     } else {
       logger.error(`[error] request=${req.id}`, error);
