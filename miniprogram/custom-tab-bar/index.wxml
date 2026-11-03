@@ -1,0 +1,26 @@
+<view class="tab-bar {{hidden ? 'tab-bar-hidden' : ''}}">
+  <view class="tab-bar-content">
+    <view
+      wx:for="{{list}}"
+      wx:key="pagePath"
+      class="tab-item {{selected === index ? 'active' : ''}}"
+      data-index="{{index}}"
+      bindtap="switchTab"
+      hover-class="tab-item-hover"
+      hover-stay-time="60"
+      aria-role="tab"
+      aria-selected="{{selected === index}}"
+    >
+      <view class="tab-icon-wrap">
+        <image
+          class="tab-icon"
+          src="{{selected === index ? item.selectedIconPath : item.iconPath}}"
+          mode="aspectFit"
+        />
+      </view>
+      <text class="tab-text">{{item.text}}</text>
+      <view class="active-mark"></view>
+    </view>
+  </view>
+  <view class="tab-bar-safe"></view>
+</view>

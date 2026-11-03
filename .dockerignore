@@ -1,0 +1,25 @@
+.git
+.gitignore
+.qa-tools
+node_modules
+server/node_modules
+server/test
+
+# Secrets and runtime data must never enter the image.
+server/.env
+server/data
+server/backups
+server/uploads
+server/*.log
+
+# Not needed by the container.
+miniprogram
+miniprogram_npm
+docs
+deploy
+tools
+project.config.json
+project.private.config.json
+start-teacher.bat
+README.md
+*.zip

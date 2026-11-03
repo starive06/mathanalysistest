@@ -1,0 +1,123 @@
+<view class="page">
+  <view class="history-hero">
+    <view class="hero-decoration">∫</view>
+    <view class="hero-top">
+      <text class="hero-kicker">MY QUESTIONS</text>
+      <view class="privacy-pill">
+        <view class="privacy-lock"></view>
+        <text>仅自己可见</text>
+      </view>
+    </view>
+    <view class="hero-main">
+      <view class="hero-copy">
+        <text class="hero-title">提问档案</text>
+        <text class="hero-sub">每一次追问，都是一次理解的发生。</text>
+      </view>
+      <view class="hero-count">
+        <text class="count-number">{{total}}</text>
+        <text class="count-label">条记录</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="section-head" wx:if="{{questions.length}}">
+    <text class="section-title">全部记录</text>
+    <text class="section-note">点击任意一条查看完整解答</text>
+  </view>
+
+  <view class="question-list" wx:if="{{questions.length}}">
+    <view
+      wx:for="{{questions}}"
+      wx:key="id"
+      class="history-row"
+      data-id="{{item.id}}"
+      bindtap="openQuestion"
+      hover-class="history-row-hover"
+      hover-stay-time="60"
+    >
+      <view class="row-top">
+        <view class="answered-badge">
+          <view class="answered-dot"></view>
+          <text>已解答</text>
+        </view>
+        <text class="row-time">{{item.time}}</text>
+      </view>
+      <text class="row-question">{{item.question}}</text>
+      <image
+        wx:if="{{item.hasImage}}"
+        class="history-image"
+        src="{{item.imageUrl}}"
+        mode="aspectFill"
+        lazy-load
+      ></image>
+      <text class="row-preview">{{item.answerPreview || '查看 DeepSeek 的完整解答'}}</text>
+      <view class="history-teacher-comments" wx:if="{{item.teacherComments.length}}">
+        <view
+          class="history-teacher-comment"
+          wx:for="{{item.teacherComments}}"
+          wx:for-item="comment"
+          wx:key="id"
+        >
+          <view class="history-comment-head">
+            <text class="history-comment-name">{{comment.authorName}}</text>
+            <text class="history-comment-tag">教师评论</text>
+            <text class="history-comment-time">{{comment.time}}</text>
+          </view>
+          <text class="history-comment-content">{{comment.content}}</text>
+        </view>
+      </view>
+      <view class="row-bottom">
+        <view class="row-like">
+          <text class="like-heart">♥</text>
+          <text>{{item.likeCount}}</text>
+        </view>
+        <view class="row-open">
+          <text>查看对话</text>
+          <view class="chevron"></view>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <view class="skeleton-list" wx:if="{{loading && !questions.length}}">
+    <view class="skeleton-card" wx:for="{{skeletons}}" wx:key="*this">
+      <view class="skeleton-line tiny"></view>
+      <view class="skeleton-line title"></view>
+      <view class="skeleton-line text"></view>
+      <view class="skeleton-line short"></view>
+    </view>
+  </view>
+
+  <view class="empty-state" wx:if="{{!loading && !questions.length && !loadError}}">
+    <view class="empty-illustration">
+      <view class="empty-bubble">
+        <view class="empty-dot"></view>
+        <view class="empty-dot"></view>
+        <view class="empty-dot"></view>
+      </view>
+      <view class="empty-sigma">Σ</view>
+    </view>
+    <text class="empty-title">还没有提问记录</text>
+    <text class="empty-copy">遇到想不明白的极限、积分或级数，尽管去问。</text>
+    <button class="primary-button" bindtap="goChat" hover-class="primary-button-hover">
+      去问一道题
+    </button>
+  </view>
+
+  <view class="error-state" wx:if="{{!loading && !questions.length && loadError}}">
+    <view class="error-symbol">!</view>
+    <text class="empty-title">记录加载失败</text>
+    <text class="empty-copy">{{loadError}}</text>
+    <button class="primary-button" bindtap="retry" hover-class="primary-button-hover">
+      重新加载
+    </button>
+  </view>
+
+  <view class="load-more" wx:if="{{questions.length}}">
+    <view class="loading-more" wx:if="{{loadingMore}}">
+      <view class="mini-spinner"></view>
+      <text>正在加载</text>
+    </view>
+    <text class="list-end" wx:elif="{{!hasMore}}">— 已经到底啦 —</text>
+  </view>
+</view>

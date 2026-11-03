@@ -1,0 +1,8 @@
+node_modules/
+.env
+data/*.json
+data/*.tmp
+data/*.corrupt-*
+backups/
+uploads/
+!data/.gitkeep

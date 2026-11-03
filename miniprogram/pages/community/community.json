@@ -1,0 +1,10 @@
+{
+  "navigationBarTitleText": "同学圈",
+  "navigationBarBackgroundColor": "#F3F4F3",
+  "navigationBarTextStyle": "black",
+  "backgroundColor": "#F3F4F3",
+  "enablePullDownRefresh": true,
+  "backgroundTextStyle": "dark",
+  "onReachBottomDistance": 100,
+  "usingComponents": {}
+}

@@ -1,0 +1,203 @@
+<view class="page {{keyboardOpen ? 'keyboard-open' : ''}}">
+  <view class="chat-header">
+    <view class="header-left">
+      <view class="ai-brand">Σ</view>
+      <view class="header-copy">
+        <text class="header-title">AI 数学助教</text>
+        <view class="header-status">
+          <view class="status-dot {{apiStatus}}"></view>
+          <text>{{apiStatusText}}</text>
+        </view>
+      </view>
+    </view>
+    <view class="header-badge">数分答疑</view>
+  </view>
+
+  <scroll-view
+    class="messages-scroll"
+    scroll-y
+    enhanced
+    show-scrollbar="{{false}}"
+    scroll-into-view="{{scrollIntoView}}"
+    scroll-with-animation
+    enable-back-to-top
+  >
+    <view class="messages-area">
+      <block wx:if="{{messages.length}}">
+        <view class="day-divider" wx:if="{{!viewingRecord}}">
+          <text>{{dayLabel}}</text>
+        </view>
+
+        <view class="record-banner" wx:if="{{viewingRecord}}">
+          <view class="record-icon">↺</view>
+          <view class="record-copy">
+            <text class="record-title">正在查看历史提问</text>
+            <text class="record-sub">可以直接继续追问这道题</text>
+          </view>
+          <button class="record-action" bindtap="startNew" hover-class="record-action-hover">
+            新提问
+          </button>
+        </view>
+
+        <view
+          wx:for="{{messages}}"
+          wx:key="id"
+          id="msg-{{item.id}}"
+          class="message-row {{item.role === 'user' ? 'from-user' : 'from-ai'}}"
+        >
+          <view class="avatar ai-avatar" wx:if="{{item.role !== 'user'}}">Σ</view>
+          <view class="bubble-wrap">
+            <view
+              class="bubble {{item.role === 'user' ? 'user-bubble' : 'ai-bubble'}} {{item.isError ? 'error-bubble' : ''}}"
+              bindlongpress="copyMessage"
+              data-index="{{index}}"
+            >
+              <view class="error-head" wx:if="{{item.isError}}">
+                <view class="error-dot"></view>
+                <text>回答失败</text>
+              </view>
+              <image
+                wx:if="{{item.imageUrl || item.imagePath}}"
+                class="bubble-image"
+                src="{{item.imageUrl || item.imagePath}}"
+                mode="widthFix"
+                data-src="{{item.imageUrl || item.imagePath}}"
+                bindtap="previewMessageImage"
+                lazy-load
+              ></image>
+              <text
+                class="bubble-text"
+                user-select="{{!item.isError}}"
+                space="nbsp"
+              >{{item.content}}</text>
+              <button
+                wx:if="{{item.isError && index === messages.length - 1}}"
+                class="retry-button"
+                bindtap="retryLast"
+                hover-class="retry-button-hover"
+              >
+                重新发送
+              </button>
+            </view>
+            <text class="message-time">{{item.time}}</text>
+          </view>
+          <view class="avatar user-avatar" wx:if="{{item.role === 'user'}}">我</view>
+        </view>
+
+        <view class="message-row from-ai" wx:if="{{loading}}">
+          <view class="avatar ai-avatar">Σ</view>
+          <view class="bubble-wrap">
+            <view class="bubble ai-bubble typing-bubble">
+              <view class="typing-dot"></view>
+              <view class="typing-dot typing-dot-2"></view>
+              <view class="typing-dot typing-dot-3"></view>
+              <text class="typing-text">正在思考</text>
+            </view>
+          </view>
+        </view>
+      </block>
+
+      <view class="welcome" wx:else>
+        <view class="welcome-orbit">
+          <view class="orbit-ring"></view>
+          <view class="welcome-symbol">Σ</view>
+          <view class="orbit-dot"></view>
+        </view>
+        <text class="welcome-kicker">MATH ANALYSIS · AI TUTOR</text>
+        <text class="welcome-title">今天想弄懂什么？</text>
+        <text class="welcome-sub">极限、连续、积分、级数……把问题写下来，我们一起拆解。</text>
+
+        <view class="suggestions">
+          <button
+            wx:for="{{suggestions}}"
+            wx:key="title"
+            class="suggestion-card"
+            data-question="{{item.question}}"
+            bindtap="useSuggestion"
+            hover-class="suggestion-hover"
+            hover-stay-time="70"
+          >
+            <view class="suggestion-top">
+              <text class="suggestion-tag">{{item.tag}}</text>
+              <text class="suggestion-arrow">→</text>
+            </view>
+            <text class="suggestion-title">{{item.title}}</text>
+            <text class="suggestion-desc">{{item.desc}}</text>
+          </button>
+        </view>
+
+        <view class="welcome-foot">
+          <view class="foot-line"></view>
+          <text>DeepSeek 驱动 · 回答仅供学习参考</text>
+          <view class="foot-line"></view>
+        </view>
+      </view>
+
+      <view id="bottom-anchor" class="bottom-anchor"></view>
+    </view>
+  </scroll-view>
+
+  <view class="composer">
+    <view class="selected-image-row" wx:if="{{selectedImagePath}}">
+      <view class="selected-image-card">
+        <image
+          class="selected-image"
+          src="{{selectedImagePath}}"
+          mode="aspectFill"
+          bindtap="previewSelectedImage"
+        ></image>
+        <button class="selected-image-remove" catchtap="removeImage" aria-label="移除图片">×</button>
+      </view>
+      <view class="selected-image-copy">
+        <text class="selected-image-title">{{selectedImageName}}</text>
+        <text class="selected-image-meta">{{selectedImageSizeText}} · 将随问题一起发送</text>
+      </view>
+    </view>
+    <view class="composer-inner">
+      <button
+        class="image-button"
+        bindtap="chooseImage"
+        hover-class="image-button-hover"
+        aria-label="选择题目图片"
+      >
+        <view class="image-icon">
+          <view class="image-icon-lens"></view>
+        </view>
+      </button>
+      <view class="input-shell {{inputFocused ? 'input-focused' : ''}}">
+        <textarea
+          class="question-input"
+          value="{{inputValue}}"
+          placeholder="输入数学分析问题，或拍下题目…"
+          placeholder-class="input-placeholder"
+          auto-height
+          maxlength="{{maxLength}}"
+          adjust-position="{{true}}"
+          cursor-spacing="24"
+          show-confirm-bar="{{false}}"
+          disable-default-padding
+          bindinput="onInput"
+          bindfocus="onInputFocus"
+          bindblur="onInputBlur"
+        ></textarea>
+        <text class="char-count" wx:if="{{inputValue.length > 1400}}">
+          {{inputValue.length}}/{{maxLength}}
+        </text>
+      </view>
+      <button
+        class="send-button {{canSend ? 'send-ready' : ''}}"
+        disabled="{{!canSend}}"
+        bindtap="onSend"
+        hover-class="send-button-hover"
+        aria-label="发送问题"
+      >
+        <view class="send-arrow"></view>
+      </button>
+    </view>
+    <view class="composer-tip">
+      <text>可上传题目截图 / 手写题</text>
+      <text class="tip-divider">·</text>
+      <text>长按回答可复制</text>
+    </view>
+  </view>
+</view>

@@ -1,0 +1,28 @@
+{
+  "name": "math-analysis-tutor-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "数学分析答疑小程序后端：DeepSeek 接入、提问记录、社区点赞与教师端导出",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "node --test",
+    "db:migrate": "node scripts/db-migrate.js",
+    "db:import-json": "node scripts/import-json.js",
+    "backup": "node scripts/backup-now.js",
+    "restore": "node scripts/restore-backup.js"
+  },
+  "dependencies": {
+    "cos-nodejs-sdk-v5": "^3.0.0",
+    "docx": "^9.5.1",
+    "dotenv": "^16.6.1",
+    "express": "^5.1.0",
+    "multer": "^2.5.0",
+    "mysql2": "^3.24.6",
+    "node-cron": "^4.6.0"
+  }
+}

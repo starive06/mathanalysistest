@@ -1,0 +1,299 @@
+<view class="page">
+  <view class="community-hero">
+    <view class="hero-symbol">∑</view>
+    <view class="hero-top">
+      <text class="hero-kicker">ANONYMOUS COMMUNITY</text>
+      <view class="anonymity-pill">
+        <view class="anonymity-dot"></view>
+        <text>匿名交流</text>
+      </view>
+    </view>
+    <view class="hero-title-line">
+      <text class="hero-title">匿名提问广场</text>
+      <text class="hero-label">互相启发</text>
+    </view>
+    <text class="hero-sub">看看其他同学在追问什么，也为那些让你恍然大悟的问题点个赞。</text>
+    <view class="hero-stats">
+      <view class="hero-stat">
+        <text class="stat-value">{{stats.totalQuestions}}</text>
+        <text class="stat-label">个问题</text>
+      </view>
+      <view class="stat-separator"></view>
+      <view class="hero-stat">
+        <text class="stat-value">{{stats.totalStudents}}</text>
+        <text class="stat-label">位同学</text>
+      </view>
+      <view class="stat-separator"></view>
+      <view class="hero-stat">
+        <text class="stat-value">{{stats.totalLikes}}</text>
+        <text class="stat-label">次点赞</text>
+      </view>
+    </view>
+  </view>
+
+  <block wx:if="{{top.length}}">
+    <view class="section-head">
+      <view class="section-title-wrap">
+        <view class="section-accent"></view>
+        <text class="section-title">高赞问题</text>
+        <view class="top-badge">TOP 3</view>
+      </view>
+      <text class="section-note">按点赞数排序</text>
+    </view>
+
+    <view class="top-list">
+      <view
+        wx:for="{{top}}"
+        wx:key="id"
+        class="top-card rank-{{index + 1}}"
+        data-id="{{item.id}}"
+        bindtap="openQuestion"
+        hover-class="top-card-hover"
+        hover-stay-time="60"
+      >
+        <view class="rank-badge rank-badge-{{index + 1}}">{{index + 1}}</view>
+        <view class="top-card-main">
+          <view class="top-meta">
+            <view class="mini-avatar">{{item.avatarText}}</view>
+            <text class="meta-name">{{item.alias}}</text>
+            <text class="meta-dot">·</text>
+            <text class="meta-time">{{item.time}}</text>
+          </view>
+          <text class="top-question">{{item.question}}</text>
+          <image
+            wx:if="{{item.hasImage}}"
+            class="top-question-image"
+            src="{{item.imageUrl}}"
+            mode="widthFix"
+            data-src="{{item.imageUrl}}"
+            catchtap="previewQuestionImage"
+            lazy-load
+          ></image>
+          <text class="top-preview">{{item.answerPreview}}</text>
+          <view class="top-bottom">
+            <view class="discussion-hint">
+              <view class="hint-line"></view>
+              <text>DeepSeek 已解答</text>
+            </view>
+            <button
+              class="comment-button"
+              data-id="{{item.id}}"
+              catchtap="openComments"
+              hover-class="comment-button-hover"
+              aria-label="查看评论"
+            >
+              <text class="comment-symbol">◌</text>
+              <text>{{item.commentCount || '评论'}}</text>
+            </button>
+            <button
+              class="like-button {{item.likedByMe ? 'liked' : ''}}"
+              data-id="{{item.id}}"
+              catchtap="toggleLike"
+              hover-class="like-button-hover"
+              aria-label="点赞"
+            >
+              <text class="like-symbol">{{item.likedByMe ? '♥' : '♡'}}</text>
+              <text class="like-number">{{item.likeCount}}</text>
+            </button>
+          </view>
+        </view>
+      </view>
+    </view>
+  </block>
+
+  <view class="section-head" wx:if="{{recent.length}}">
+    <view class="section-title-wrap">
+      <view class="section-accent recent"></view>
+      <text class="section-title">最新提问</text>
+    </view>
+    <text class="section-note">按时间倒序</text>
+  </view>
+
+  <view class="feed-list" wx:if="{{recent.length}}">
+    <view
+      wx:for="{{recent}}"
+      wx:key="id"
+      class="feed-row"
+      data-id="{{item.id}}"
+      bindtap="openQuestion"
+      hover-class="feed-row-hover"
+      hover-stay-time="60"
+    >
+      <view class="feed-avatar">{{item.avatarText}}</view>
+      <view class="feed-main">
+        <view class="feed-meta">
+          <text class="feed-name">{{item.alias}}</text>
+          <text class="feed-time">{{item.time}}</text>
+        </view>
+        <text class="feed-question">{{item.question}}</text>
+        <image
+          wx:if="{{item.hasImage}}"
+          class="feed-question-image"
+          src="{{item.imageUrl}}"
+          mode="aspectFill"
+          data-src="{{item.imageUrl}}"
+          catchtap="previewQuestionImage"
+          lazy-load
+        ></image>
+        <text class="feed-preview">{{item.answerPreview}}</text>
+        <view class="feed-actions">
+          <button
+            class="feed-comment"
+            data-id="{{item.id}}"
+            catchtap="openComments"
+            hover-class="feed-comment-hover"
+            aria-label="查看评论"
+          >
+            <text>◌ 评论 {{item.commentCount || ''}}</text>
+          </button>
+          <button
+            class="feed-like {{item.likedByMe ? 'liked' : ''}}"
+            data-id="{{item.id}}"
+            catchtap="toggleLike"
+            hover-class="feed-like-hover"
+            aria-label="点赞"
+          >
+            <text class="feed-like-symbol">{{item.likedByMe ? '♥' : '♡'}}</text>
+            <text>{{item.likeCount}}</text>
+          </button>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <view class="skeleton-wrap" wx:if="{{loading && !top.length && !recent.length}}">
+    <view class="skeleton-hero"></view>
+    <view class="skeleton-card" wx:for="{{skeletons}}" wx:key="*this">
+      <view class="skeleton-line tiny"></view>
+      <view class="skeleton-line title"></view>
+      <view class="skeleton-line text"></view>
+    </view>
+  </view>
+
+  <view class="empty-state" wx:if="{{!loading && !top.length && !recent.length && !loadError}}">
+    <view class="empty-orbit">
+      <view class="empty-sigma">Σ</view>
+      <view class="empty-person"></view>
+    </view>
+    <text class="empty-title">同学圈还很安静</text>
+    <text class="empty-copy">提出第一个好问题，让讨论从你开始。</text>
+    <button class="primary-button" bindtap="goChat" hover-class="primary-button-hover">
+      去提问
+    </button>
+  </view>
+
+  <view class="error-state" wx:if="{{!loading && !top.length && !recent.length && loadError}}">
+    <view class="error-symbol">!</view>
+    <text class="empty-title">同学圈加载失败</text>
+    <text class="empty-copy">{{loadError}}</text>
+    <button class="primary-button" bindtap="retry" hover-class="primary-button-hover">
+      重新加载
+    </button>
+  </view>
+
+  <view class="load-more" wx:if="{{recent.length && hasMore}}">
+    <view class="loading-more" wx:if="{{loadingMore}}">
+      <view class="mini-spinner"></view>
+      <text>正在加载更多</text>
+    </view>
+    <button
+      wx:else
+      class="load-more-button"
+      bindtap="loadMore"
+      hover-class="load-more-button-hover"
+    >
+      加载更多提问
+    </button>
+  </view>
+
+  <view
+    class="feed-end"
+    wx:if="{{(top.length || recent.length) && !hasMore && !loadingMore}}"
+  >
+    <view class="end-line"></view>
+    <text>所有提问均已匿名展示</text>
+    <view class="end-line"></view>
+  </view>
+
+  <view
+    class="comment-sheet-backdrop"
+    wx:if="{{commentSheetOpen}}"
+    catchtap="closeComments"
+  ></view>
+  <view class="comment-sheet" wx:if="{{commentSheetOpen}}" catchtap="noop">
+    <view class="sheet-handle"></view>
+    <view class="sheet-head">
+      <view class="sheet-title-wrap">
+        <text class="sheet-title">评论区</text>
+        <text class="sheet-sub" wx:if="{{commentQuestion}}">
+          {{commentQuestion.teacherCommentCount ? '教师评论已置顶' : '和同学、老师一起讨论'}}
+        </text>
+      </view>
+      <button class="sheet-close" catchtap="closeComments" aria-label="关闭评论区">×</button>
+    </view>
+    <view class="sheet-question" wx:if="{{commentQuestion}}">
+      <text class="sheet-question-text">{{commentQuestion.question}}</text>
+    </view>
+    <scroll-view class="comment-list" scroll-y enhanced show-scrollbar="{{false}}">
+      <view class="comment-loading" wx:if="{{commentLoading}}">
+        <view class="mini-spinner"></view>
+        <text>正在加载评论</text>
+      </view>
+      <view class="comment-error" wx:if="{{!commentLoading && commentError}}">
+        <text>{{commentError}}</text>
+        <button class="comment-retry" catchtap="openComments" data-id="{{commentQuestion.id}}">重试</button>
+      </view>
+      <view class="comment-empty" wx:if="{{!commentLoading && !commentError && !comments.length}}">
+        <text class="comment-empty-symbol">◌</text>
+        <text>还没有评论，来留下第一条讨论吧。</text>
+      </view>
+      <view
+        wx:for="{{comments}}"
+        wx:key="id"
+        class="comment-item {{item.isTeacher ? 'teacher' : ''}}"
+      >
+        <view class="comment-item-head">
+          <view class="comment-avatar {{item.isTeacher ? 'teacher' : ''}}">
+            {{item.isTeacher ? '师' : '匿'}}
+          </view>
+          <view class="comment-author-wrap">
+            <view class="comment-author-line">
+              <text class="comment-author">{{item.authorName}}</text>
+              <text class="comment-teacher-tag" wx:if="{{item.isTeacher}}">教师评论</text>
+            </view>
+            <text class="comment-time">{{item.time}}</text>
+          </view>
+          <button
+            class="comment-like {{item.likedByMe ? 'liked' : ''}}"
+            data-id="{{item.id}}"
+            catchtap="toggleCommentLike"
+            aria-label="点赞评论"
+          >
+            <text>{{item.likedByMe ? '♥' : '♡'}} {{item.likeCount}}</text>
+          </button>
+        </view>
+        <text class="comment-content">{{item.content}}</text>
+      </view>
+    </scroll-view>
+    <view class="comment-compose">
+      <textarea
+        class="comment-input"
+        value="{{commentDraft}}"
+        maxlength="1000"
+        placeholder="写下你的评论…"
+        auto-height
+        adjust-position
+        bindinput="onCommentInput"
+      ></textarea>
+      <button
+        class="comment-send"
+        loading="{{commentSubmitting}}"
+        disabled="{{!commentDraft || commentSubmitting}}"
+        catchtap="submitComment"
+      >
+        发送
+      </button>
+    </view>
+    <view class="sheet-safe"></view>
+  </view>
+</view>

@@ -1,0 +1,36 @@
+# /etc/systemd/system/math-tutor.service
+# 根据实际用户名和项目路径修改 User / WorkingDirectory / ExecStart。
+[Unit]
+Description=Math Analysis Tutor API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+
+WorkingDirectory=/opt/math-analysis-tutor/server
+EnvironmentFile=/opt/math-analysis-tutor/server/.env
+Environment=NODE_ENV=production
+
+ExecStart=/usr/bin/node /opt/math-analysis-tutor/server/src/server.js
+Restart=always
+RestartSec=3
+KillSignal=SIGTERM
+TimeoutStopSec=15
+
+# 如果启用了 BACKUP_LOCAL_DIR，确保该目录对运行用户可写
+# ReadWritePaths=/var/backups/math-analysis-tutor
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+LimitNOFILE=65536
+
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

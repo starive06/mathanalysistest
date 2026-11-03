@@ -1,0 +1,10 @@
+{
+  "navigationBarTitleText": "我的提问",
+  "navigationBarBackgroundColor": "#F3F4F3",
+  "navigationBarTextStyle": "black",
+  "backgroundColor": "#F3F4F3",
+  "enablePullDownRefresh": true,
+  "backgroundTextStyle": "dark",
+  "onReachBottomDistance": 120,
+  "usingComponents": {}
+}

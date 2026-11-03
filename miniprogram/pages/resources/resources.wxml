@@ -1,0 +1,129 @@
+<view class="page">
+  <view class="resource-hero">
+    <view class="hero-books" aria-hidden="true">
+      <view class="book book-back"></view>
+      <view class="book book-middle"></view>
+      <view class="book book-front">
+        <view class="book-line"></view>
+        <view class="book-line short"></view>
+      </view>
+      <view class="book-spark">+</view>
+    </view>
+    <view class="hero-copy">
+      <text class="hero-kicker">LEARNING LIBRARY</text>
+      <text class="hero-title">学习资源</text>
+      <text class="hero-sub">讲义、课件、作业与试卷，随时翻一翻。</text>
+      <view class="hero-meta">
+        <text>{{resources.length}} 份资料</text>
+        <view class="meta-dot"></view>
+        <text>PPT / Word / PDF</text>
+      </view>
+    </view>
+  </view>
+
+  <scroll-view class="category-scroll" scroll-x enhanced show-scrollbar="{{false}}">
+    <view class="category-row">
+      <button
+        class="category-chip {{!activeCategory ? 'active' : ''}}"
+        data-category=""
+        bindtap="selectCategory"
+        hover-class="chip-hover"
+      >
+        全部
+      </button>
+      <button
+        wx:for="{{categories}}"
+        wx:key="*this"
+        class="category-chip {{activeCategory === item ? 'active' : ''}}"
+        data-category="{{item}}"
+        bindtap="selectCategory"
+        hover-class="chip-hover"
+      >
+        {{item}}
+      </button>
+    </view>
+  </scroll-view>
+
+  <view class="section-row" wx:if="{{resources.length}}">
+    <text class="section-title">{{activeCategory || '全部资源'}}</text>
+    <text class="section-count">{{filteredResources.length}} 份</text>
+  </view>
+
+  <view class="resource-list" wx:if="{{filteredResources.length}}">
+    <view
+      wx:for="{{filteredResources}}"
+      wx:key="id"
+      class="resource-card"
+      data-id="{{item.id}}"
+      bindtap="openResource"
+      hover-class="resource-card-hover"
+      hover-stay-time="60"
+    >
+      <view class="file-badge {{item.badgeClass}}">
+        <text>{{item.fileTypeLabel}}</text>
+      </view>
+      <view class="resource-main">
+        <view class="resource-title-row">
+          <text class="resource-title">{{item.title}}</text>
+          <text class="resource-category">{{item.category}}</text>
+        </view>
+        <text class="resource-desc">{{item.description || item.fileName}}</text>
+        <view class="resource-meta">
+          <text>{{item.sizeText}}</text>
+          <view class="meta-dot"></view>
+          <text>{{item.timeText}}更新</text>
+        </view>
+      </view>
+      <view class="open-mark {{openingId === item.id ? 'opening' : ''}}">
+        <view class="open-arrow"></view>
+      </view>
+    </view>
+  </view>
+
+  <view class="skeleton-list" wx:if="{{loading && !resources.length}}">
+    <view class="skeleton-card" wx:for="{{skeletons}}" wx:key="*this">
+      <view class="skeleton-badge"></view>
+      <view class="skeleton-copy">
+        <view class="skeleton-line title"></view>
+        <view class="skeleton-line text"></view>
+        <view class="skeleton-line short"></view>
+      </view>
+    </view>
+  </view>
+
+  <view class="empty-state" wx:if="{{!loading && !filteredResources.length && !loadError}}">
+    <view class="empty-book">
+      <view class="empty-page"></view>
+      <view class="empty-page back"></view>
+      <text>Σ</text>
+    </view>
+    <text class="empty-title">{{activeCategory ? '这个分类还没有资料' : '老师还没有上传资源'}}</text>
+    <text class="empty-copy">{{activeCategory ? '换一个分类看看，或者等待老师更新。' : '讲义、课件和练习资料会出现在这里。'}}</text>
+    <button
+      wx:if="{{activeCategory}}"
+      class="primary-button"
+      data-category=""
+      bindtap="selectCategory"
+      hover-class="primary-button-hover"
+    >
+      查看全部资源
+    </button>
+  </view>
+
+  <view class="error-state" wx:if="{{!loading && loadError && !resources.length}}">
+    <view class="error-symbol">!</view>
+    <text class="empty-title">资源加载失败</text>
+    <text class="empty-copy">{{loadError}}</text>
+    <button class="primary-button" bindtap="retry" hover-class="primary-button-hover">
+      重新加载
+    </button>
+  </view>
+
+  <view class="resource-foot" wx:if="{{filteredResources.length}}">
+    <view class="foot-line"></view>
+    <text>资料由课程教师上传 · 仅供学习使用</text>
+    <view class="foot-line"></view>
+  </view>
+
+  <view class="page-bottom-space"></view>
+</view>

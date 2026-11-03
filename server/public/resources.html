@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light" />
+    <meta name="theme-color" content="#07c160" />
+    <title>教学资源 · 数学分析教师后台</title>
+    <link rel="icon" href="/admin/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/admin/styles.css" />
+    <link rel="stylesheet" href="/admin/resources.css" />
+  </head>
+  <body>
+    <div class="login-screen" id="auth-gate" hidden>
+      <section class="login-card gate-card">
+        <span class="brand-mark">Σ</span>
+        <p class="eyebrow">TEACHER ACCESS</p>
+        <h2>请先登录教师端</h2>
+        <p class="login-sub">教学资源管理需要教师口令登录。请先返回教师后台完成登录。</p>
+        <a class="button primary gate-button" href="/admin">前往教师登录</a>
+      </section>
+    </div>
+
+    <div class="app" id="app" hidden>
+      <header class="topbar">
+        <a class="topbar-brand" href="/admin" aria-label="返回教师后台">
+          <span class="brand-mark small">Σ</span>
+          <span class="brand-copy">
+            <strong>数学分析答疑</strong>
+            <small>教学资源</small>
+          </span>
+        </a>
+        <div class="topbar-actions">
+          <a class="text-button back-link" href="/admin">返回答疑记录</a>
+          <span class="topbar-divider"></span>
+          <button type="button" class="text-button" id="logout-button">退出登录</button>
+        </div>
+      </header>
+
+      <main class="workspace resource-workspace">
+        <section class="page-heading resource-heading">
+          <div>
+            <p class="eyebrow">TEACHING RESOURCES</p>
+            <h1>教学资源</h1>
+            <p class="page-subtitle" id="page-subtitle">管理讲义、课件和练习资料，学生在小程序「资源」中浏览。</p>
+          </div>
+          <button type="button" class="button primary" id="upload-button">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M12 16V5M7.5 9.5 12 5l4.5 4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+              <path d="M5 15.5V18a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            </svg>
+            上传资源
+          </button>
+        </section>
+
+        <section class="resource-summary" aria-label="资源概览">
+          <div class="resource-summary-item">
+            <span>资源总数</span>
+            <strong id="summary-total">—</strong>
+          </div>
+          <div class="resource-summary-item">
+            <span>已覆盖分类</span>
+            <strong id="summary-categories">—</strong>
+          </div>
+          <div class="resource-summary-item">
+            <span>最近更新</span>
+            <strong id="summary-updated">—</strong>
+          </div>
+        </section>
+
+        <section class="panel resource-panel">
+          <div class="panel-toolbar resource-toolbar">
+            <div class="search-field">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle cx="10.8" cy="10.8" r="6.3" stroke="currentColor" stroke-width="1.7" />
+                <path d="m15.5 15.5 4 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+              </svg>
+              <input id="resource-search" type="search" placeholder="搜索标题或简介" autocomplete="off" />
+            </div>
+            <label class="resource-filter">
+              <span>分类</span>
+              <select id="category-filter">
+                <option value="">全部分类</option>
+              </select>
+            </label>
+            <span class="result-count" id="resource-count">—</span>
+          </div>
+
+          <div class="mobile-table-hint">表格可左右滑动查看完整内容</div>
+
+          <div class="table-wrap">
+            <table class="resource-table">
+              <thead>
+                <tr>
+                  <th>资源</th>
+                  <th class="resource-category-col">分类</th>
+                  <th class="resource-format-col">格式</th>
+                  <th class="resource-size-col">大小</th>
+                  <th class="resource-time-col">更新时间</th>
+                  <th class="resource-actions-col"><span class="sr-only">操作</span></th>
+                </tr>
+              </thead>
+              <tbody id="resource-rows"></tbody>
+            </table>
+          </div>
+
+          <div class="empty-state resource-empty" id="resource-empty" hidden>
+            <div class="empty-visual"><span>书</span><span>?</span><span>PDF</span></div>
+            <h3 id="empty-title">还没有教学资源</h3>
+            <p id="empty-copy">上传第一份讲义、课件或作业资料，学生就能在小程序「资源」中查看。</p>
+            <button type="button" class="button secondary small" id="empty-upload">上传资源</button>
+            <button type="button" class="button secondary small" id="empty-reset" hidden>清除筛选</button>
+          </div>
+
+          <div class="table-loading" id="resource-loading">
+            <div class="loading-line"></div>
+            <div class="loading-line short"></div>
+            <div class="loading-line"></div>
+          </div>
+
+          <footer class="panel-footer">
+            <span id="resource-footer">共 0 份资源</span>
+            <span class="footer-meta">
+              <i class="live-dot"></i>
+              支持 PPT / Word / PDF · 单文件最大 <span id="max-file-size">30 MB</span>
+            </span>
+          </footer>
+        </section>
+      </main>
+    </div>
+
+    <div class="modal-backdrop" id="resource-modal-backdrop" hidden></div>
+    <section class="resource-modal" id="resource-modal" role="dialog" aria-modal="true" aria-labelledby="resource-modal-title" aria-hidden="true">
+      <header class="resource-modal-header">
+        <div>
+          <p class="eyebrow">RESOURCE EDITOR</p>
+          <h2 id="resource-modal-title">上传资源</h2>
+        </div>
+        <button type="button" class="icon-button" id="resource-modal-close" aria-label="关闭">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+          </svg>
+        </button>
+      </header>
+      <form id="resource-form" class="resource-form">
+        <div class="form-row">
+          <label class="form-field">
+            <span>资源标题 <b>*</b></span>
+            <input id="resource-title" name="title" type="text" maxlength="200" placeholder="例如：第一章 极限与连续 讲义" required />
+          </label>
+          <label class="form-field">
+            <span>资源分类 <b>*</b></span>
+            <select id="resource-category" name="category" required>
+              <option value="">请选择分类</option>
+            </select>
+          </label>
+        </div>
+        <label class="form-field">
+          <span>简介</span>
+          <textarea id="resource-description" name="description" rows="3" maxlength="1000" placeholder="可选：简单说明内容或适用范围"></textarea>
+        </label>
+        <div class="form-field">
+          <span>资源文件 <b id="file-required-mark">*</b></span>
+          <label class="file-drop" for="resource-file">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M14 3.5H7A2.5 2.5 0 0 0 4.5 6v12A2.5 2.5 0 0 0 7 20.5h10a2.5 2.5 0 0 0 2.5-2.5V9L14 3.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
+              <path d="M14 3.5V9h5.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
+            </svg>
+            <span class="file-drop-copy">
+              <strong id="file-drop-title">点击选择文件</strong>
+              <small id="file-drop-copy">支持 .ppt、.pptx、.doc、.docx、.pdf</small>
+            </span>
+            <input id="resource-file" name="file" type="file" accept=".ppt,.pptx,.doc,.docx,.pdf" />
+          </label>
+          <p class="file-hint" id="current-file" hidden></p>
+          <p class="form-error" id="resource-form-error" role="alert"></p>
+        </div>
+        <div class="resource-form-actions">
+          <button type="button" class="button secondary" id="resource-cancel">取消</button>
+          <button type="submit" class="button primary" id="resource-save">保存资源</button>
+        </div>
+      </form>
+    </section>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <script src="/admin/resources.js" defer></script>
+  </body>
+</html>
