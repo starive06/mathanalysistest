@@ -11,22 +11,24 @@
  *   不占用 request 合法域名，也不需要单独给小程序配置公网域名。
  *   cloudEnv 填云开发环境 ID，cloudService 填云托管服务名称。
  */
-const TRANSPORT = 'http'; // 上线微信云托管后改成 'cloud'
+// 当前直接使用云托管公网 HTTPS，不依赖局域网。
+const TRANSPORT = 'http';
 
 module.exports = {
   transport: TRANSPORT,
 
-  // transport = 'http' 时使用
-  apiBaseUrl: 'http://192.168.1.155:3000',
+  // transport = 'http' 时使用：云托管公网 HTTPS 域名
+  apiBaseUrl:
+    'https://express-zm4o-340559-12-1523248674.sh.run.tcloudbase.com',
 
   // transport = 'cloud' 时使用
   cloudEnv: 'prod-xxxxxxxx', // 例如 prod-7gxxxxxx；以云开发控制台为准
   cloudService: 'math-tutor', // 云托管服务名称，必须和 X-WX-SERVICE 一致
 
-  // 云托管的公网 HTTPS 域名（教师后台同一域名）。
-  // callContainer 单次请求最长只有 15 秒，DeepSeek 问答和资源下载改走这个域名。
-  // 需要在微信后台把该域名加入 request + downloadFile + uploadFile 合法域名。
-  cloudPublicBaseUrl: '', // 例如 https://math-tutor-xxxx.ap-shanghai.run.tcloudbase.com
+  // 云托管公网 HTTPS 域名（教师后台同一域名）。
+  // 当前 transport 为 http，实际请求走 apiBaseUrl；保留此值便于以后切到 cloud 模式。
+  cloudPublicBaseUrl:
+    'https://express-zm4o-340559-12-1523248674.sh.run.tcloudbase.com',
 
   requestTimeout: 90000,
 };
